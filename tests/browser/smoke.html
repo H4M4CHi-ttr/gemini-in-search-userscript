@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><title>PiP-first userscript verification</title>
+<style>body{font:14px system-ui;background:#f4f6fb;margin:20px}iframe{border:1px solid #d8e0ef;background:white;height:800px;vertical-align:top}#google{width:650px}#gemini{width:480px}pre{white-space:pre-wrap}</style></head>
+<body><h1>ローカル模擬DOM試験</h1><p>Google / Geminiへの通信や検索語の外部送信はありません。</p>
+<iframe id="google" title="Google search fixture" src="./smoke-frame.html"></iframe>
+<iframe id="gemini" title="Gemini worker fixture" src="./smoke-frame.html"></iframe><pre id="result">準備中…</pre>
+<script type="module">
+const script=await(await fetch('/outputs/userscript/gemini-search-bridge.user.js')).text();
+const store=new Map(), tabs={google:{},gemini:{}}, listeners=[];
+const locations={google:new URL('https://www.google.com/search?q=2%2B2'),gemini:new URL('https://gemini.google.com/app')};
+const frames={google:document.querySelector('#google'),gemini:document.querySelector('#gemini')};
+const visibility={google:'visible',gemini:'visible'};
+let opens=0,sends=0,pipOpens=0,geminiBoots=0,progressSeen=false;
+const sentQueries=[];
+const pipApi={window:null,async requestWindow(){
+  pipOpens++;
+  const events=new EventTarget(),doc=document.implementation.createHTMLDocument('Mock PiP');
+  Object.defineProperty(doc,'visibilityState',{get:()=>target.closed?'hidden':'visible'});
+  const target={document:doc,closed:false,focus(){},addEventListener:events.addEventListener.bind(events),close(){this.closed=true;events.dispatchEvent(new Event('pagehide'));pipApi.window=null;}};
+  this.window=target;return target;
+}};
+const pause=ms=>new Promise(r=>setTimeout(r,ms));
+const wait=async(fn)=>{const end=Date.now()+14000;while(!fn()){if(Date.now()>end)throw Error('Timed out');await pause(40)}};
+const assert=(value,note)=>{if(!value)throw Error(note)};
+async function ready(frame){if(frame.contentDocument?.URL.includes('smoke-frame.html')&&frame.contentDocument?.readyState==='complete')return;await new Promise(r=>frame.addEventListener('load',r,{once:true}))}
+function execute(role){
+  const w=frames[role].contentWindow;
+  Object.defineProperty(w.document,'visibilityState',{configurable:true,get:()=>visibility[role]});
+  Object.defineProperty(w.document,'hasFocus',{configurable:true,value:()=>role==='google'});
+  let proxy;
+  proxy=new Proxy(w,{get(target,key){
+    if(key==='top')return proxy;
+    if(key==='documentPictureInPicture')return role==='gemini'?pipApi:undefined;
+    if(key==='open')return url=>{opens++;void bootGemini(url);return {closed:false,focus(){}}};
+    if(key==='focus')return ()=>{};
+    const value=Reflect.get(target,key,target);
+    return typeof value==='function'&&['setTimeout','clearTimeout','setInterval','clearInterval','addEventListener','removeEventListener'].includes(key)?value.bind(target):value;
+  }});
+  const loc={get href(){return locations[role].href},get hostname(){return locations[role].hostname},get hash(){return locations[role].hash},get pathname(){return locations[role].pathname}};
+  const notify=(key,previous,value)=>{for(const entry of listeners.filter(e=>e.key===key))setTimeout(()=>entry.fn(key,previous,value,entry.role!==role),0)};
+  const set=(key,value)=>{const previous=store.get(key);store.set(key,structuredClone(value));if(key==='gsb-userscript:v4:reply'&&value.progressText?.includes('Draft'))progressSeen=true;notify(key,previous,structuredClone(value))};
+  const remove=key=>{const previous=store.get(key);store.delete(key);notify(key,previous,undefined)};
+  new w.Function('window','location','GM_getValue','GM_setValue','GM_deleteValue','GM_addValueChangeListener','GM_getTab','GM_saveTab','GM_getTabs',script)(proxy,loc,(key,fallback)=>store.get(key)??fallback,set,remove,(key,fn)=>{listeners.push({role,key,fn});return listeners.length},callback=>callback(tabs[role]),value=>Object.assign(tabs[role],value),callback=>callback(tabs));
+}
+async function bootGemini(url){
+  geminiBoots++;locations.gemini=new URL(url);await ready(frames.gemini);
+  const d=frames.gemini.contentDocument;
+  d.body.innerHTML='<button aria-label="New chat">New chat</button><textarea aria-label="Prompt"></textarea><button aria-label="Send message">Send</button><main></main>';
+  d.querySelector('[aria-label="New chat"]').onclick=()=>{d.querySelector('main').replaceChildren();d.querySelector('textarea').value='';locations.gemini=new URL('https://gemini.google.com/app')};
+  d.querySelector('[aria-label="Send message"]').onclick=()=>{
+    const query=d.querySelector('textarea').value;sentQueries.push(query);sends++;d.querySelector('textarea').value='';
+    locations.gemini=new URL('https://gemini.google.com/app/mock-chat-'+sends);
+    const match=/^(\d+)\+(\d+)$/.exec(query);if(!match)throw Error('Unexpected fixture query');
+    const main=d.querySelector('main');main.innerHTML='<user-query></user-query><button aria-label="Stop response">Stop</button><model-response><div class="markdown-main-panel" aria-busy="true"><p></p></div></model-response>';
+    main.querySelector('user-query').textContent=query;
+    const parts=['Draft <b>text</b>','Draft revised',String(Number(match[1])+Number(match[2]))];let step=0;
+    const advance=()=>{if(!pipApi.window||pipApi.window.closed){setTimeout(advance,80);return}main.querySelector('p').textContent=parts[step++];if(step===parts.length){main.querySelector('.markdown-main-panel').setAttribute('aria-busy','false');main.querySelector('button').remove()}else setTimeout(advance,query==='4+5'?1200:350)};
+    setTimeout(advance,100);
+  };
+  execute('gemini');
+}
+function card(){return frames.google.contentDocument.querySelector('#gemini-search-bridge-root')?.shadowRoot}
+function pipButton(){return frames.gemini.contentDocument.querySelector('#gemini-search-bridge-worker-view')?.shadowRoot.querySelector('.primary')}
+function completed(){return store.get('gsb-userscript:v4:reply')?.status==='completed'}
+async function changeQuery(query){locations.google=new URL('https://www.google.com/search?q='+encodeURIComponent(query));frames.google.contentDocument.body.append(frames.google.contentDocument.createComment('SPA route change'));await pause(700)}
+function buildGoogleDOM(){
+  const d=frames.google.contentDocument;
+  d.body.innerHTML='<nav id="hdtb"><a href="https://www.google.com/search?q=2%2B2">すべて</a> <a href="https://www.google.com/search?q=2%2B2&udm=50">AI モード</a> <a href="https://www.google.com/search?q=2%2B2&udm=2">画像</a></nav><div id="rso"><div data-attrid="AIOverview">AIによる概要</div><section id="organic"><h2>通常の検索結果</h2><p>GeminiとGoogle検索についてのページです。</p></section></div>';
+  return d;
+}
+async function run(){
+  await ready(frames.google);const d=buildGoogleDOM();
+  execute('google');await wait(()=>card());
+  assert(card().querySelectorAll('button').length===1&&!card().querySelector('input'),'Initial single button');
+  assert(!store.get('gsb-userscript:v4:request'),'No send before PiP consent');
+  card().querySelector('button').click();await wait(()=>pipButton());
+  assert(sends===0,'No send before Gemini trusted-start flow');
+  pipButton().click();await wait(completed);await pause(150);
+  assert(card().querySelector('.answer')?.textContent==='4','Answer card updated');
+  assert(progressSeen,'Cumulative stream propagated');
+  const link=card().querySelector('.conversation');
+  assert(link?.href==='https://gemini.google.com/app/mock-chat-1','Actual chat link');
+  assert(d.querySelector('[data-gsb-gemini-nav]')?.href===link.href,'Nav and card share target');
+  assert(getComputedStyle(d.querySelector('[data-attrid="AIOverview"]')).display==='none','AI hidden');
+  assert(getComputedStyle(d.querySelector('#organic')).display!=='none','Organic results preserved');
+  visibility.gemini='hidden';frames.gemini.contentDocument.dispatchEvent(new frames.gemini.contentWindow.Event('visibilitychange'));
+  for(const query of ['3+4','8+9','10+11','2+2','1+1']){
+    const before=sends;await changeQuery(query);await wait(()=>sends===before+1);await wait(completed);await pause(120);
+    const [a,b]=query.split('+').map(Number);assert(card().querySelector('.answer')?.textContent===String(a+b),'Sequential answer '+query);
+  }
+  // Latest-only pending queue: let one request generate while replacing queued searches.
+  await changeQuery('4+5');await wait(()=>store.get('gsb-userscript:v4:reply')?.status==='generating');
+  const before=sends;await changeQuery('5+6');await changeQuery('6+7');await wait(()=>sends===before+1&&completed());await pause(120);
+  assert(sentQueries.at(-1)==='6+7'&&!sentQueries.includes('5+6'),'Only latest pending query dispatched');
+  // Close/reopen PiP during generation, never resubmit that query.
+  await changeQuery('7+8');await wait(()=>store.get('gsb-userscript:v4:reply')?.status==='generating');
+  const submitted=sends;pipApi.window.close();await pause(500);assert(sends===submitted,'PiP close no resend');
+  pipButton().click();await wait(completed);assert(sends===submitted,'PiP reopen same observer');
+  assert(opens===1&&geminiBoots===1,'Same owner reused');
+  await wait(()=>card().querySelector('.answer')?.textContent==='15');
+  const restoredHref='https://gemini.google.com/app/mock-chat-9',beforeReload=sends;
+  assert(sends===9&&card().querySelector('.conversation')?.href===restoredHref,'Final synthetic query completed');
+  // Google's telemetry changes the URL without changing the completed search.
+  locations.google.searchParams.set('sei','fixture-telemetry');
+  d.body.append(d.createComment('Google URL telemetry'));
+  await pause(600);
+  assert(card().querySelector('.answer')?.textContent==='15'&&sends===beforeReload,'Telemetry preserves answer without replay');
+  // Reload the real fixture document; GM storage and per-tab metadata survive it.
+  for(let i=listeners.length-1;i>=0;i--)if(listeners[i].role==='google')listeners.splice(i,1);
+  const reloaded=new Promise(resolve=>frames.google.addEventListener('load',resolve,{once:true}));
+  frames.google.src='./smoke-frame.html?boot';
+  await reloaded;await ready(frames.google);
+  assert(frames.google.contentDocument!==d,'Google fixture document fully reloaded');
+  const restored=buildGoogleDOM();execute('google');
+  await wait(()=>card()?.querySelector('.answer')?.textContent==='15');
+  assert(card().querySelector('.conversation')?.href===restoredHref&&restored.querySelector('[data-gsb-gemini-nav]')?.href===restoredHref,'Full reload restores exact native conversation link');
+  await pause(600);
+  assert(sends===beforeReload&&opens===1&&geminiBoots===1,'Full reload does not replay or replace owner');
+  return {passed:true,sends,opens,geminiBoots,pipOpens,progressSeen,answer:card().querySelector('.answer')?.textContent,latestOnly:true,hiddenOwner:true,chatLink:true,aiHidden:true,organicPreserved:true,fullReloadRestored:true,telemetryPreserved:true,noReplay:true};
+}
+window.smokePromise=run().then(result=>{window.smokeResult=result;document.querySelector('#result').textContent=JSON.stringify(result,null,2);return result}).catch(error=>{window.smokeResult={passed:false,error:error.message,stack:error.stack};document.querySelector('#result').textContent=JSON.stringify(window.smokeResult,null,2);return window.smokeResult});
+</script></body></html>

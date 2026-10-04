@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>検索レイアウト回帰試験</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#fff;color:#202124;font:14px/1.6 Arial,"Yu Gothic UI",sans-serif}header{padding:24px 24px 0;border-bottom:1px solid #dadce0}h1{font-size:17px;margin:0 0 12px}.nav-shelf{overflow-x:auto}.olrp5b{display:flex;align-items:flex-start;gap:24px;min-width:max-content}.XVMlrc{display:block;color:#5f6368;text-decoration:none}.mXwfNd{min-height:52px;display:flex;align-items:center}.mVH5Fc{padding:12px 0 16px}.R1QWuf{font-size:14px;line-height:20px;font-weight:500;color:#5f6368}.native-active .mXwfNd{box-shadow:inset 0 -3px #202124}.native-active .R1QWuf{color:#202124}main{padding:20px 24px;max-width:800px}#rso{min-width:0}.organic{padding:16px 0;margin-bottom:20px}.organic h3{font-size:19px;font-weight:500;color:#1a0dab;margin:0 0 6px}.organic p{margin:0}.SePcAf{min-height:440px;border-bottom:1px solid #dadce0;margin-bottom:24px;display:flex;flex-direction:column;justify-content:space-between}.SePcAf [role=button]{padding:14px;border:1px solid #c5d4f4;border-radius:24px;text-align:center}#fixture-result{margin:20px 24px;padding:12px;background:#f2f5fc;white-space:pre-wrap;font:12px/1.6 Consolas,monospace;overflow-wrap:anywhere;max-width:800px}[data-legacy-hide]{display:none!important}a[data-legacy-gemini]{color:#415fc8;font-weight:700;border-bottom:3px solid #415fc8}
+@media(max-width:480px){header{padding:16px 16px 0}main{padding:16px}.olrp5b{gap:20px}#fixture-result{margin:16px}}
+</style></head><body>
+<header><h1>Google検索構造を使ったローカル確認</h1><div class="nav-shelf" id="hdtb"><div class="olrp5b">
+<a class="XVMlrc C6AK7c" data-native-ai href="https://www.google.com/search?q=fixture&udm=50" jsaction="navigate" onclick="return false"><div class="mXwfNd"><div class="mVH5Fc"><span class="R1QWuf"><span jsname="KliEFc">AI モード</span></span></div></div></a>
+<a class="XVMlrc C6AK7c native-active" data-native-all href="https://www.google.com/search?q=fixture"><div class="mXwfNd"><div class="mVH5Fc"><span class="R1QWuf"><span>すべて</span></span></div></div></a>
+<a class="XVMlrc C6AK7c" href="https://www.google.com/search?q=fixture&udm=2"><div class="mXwfNd"><div class="mVH5Fc"><span class="R1QWuf"><span>画像</span></span></div></div></a>
+<a class="XVMlrc C6AK7c" href="https://www.google.com/search?q=fixture&udm=vid"><div class="mXwfNd"><div class="mVH5Fc"><span class="R1QWuf"><span>動画</span></span></div></div></a>
+</div></div></header>
+<main id="search"><div id="rcnt"><div id="center_col"><div id="rso"><section class="organic" id="first-result"><h3>通常の検索結果 1</h3><p>この結果はAI回答を隠しても残す必要があります。</p></section></div></div></div></main>
+<pre id="fixture-result">準備中…</pre>
+<script type="module">
+import {SearchOverrides} from '/src/content/google/search-overrides.ts';
+import {SearchCardView} from '/src/content/google/card-view.ts';
+const params=new URL(location.href).searchParams, placement=params.get('placement')??'inside';
+const holder=document.createElement('div');holder.className='MjjYud';
+holder.innerHTML='<div id="eKIzJc" class="SePcAf" data-lhcontainer="1"><style></style><div class="YzCcne"><div class="hdzaWe"><div class="EyBRub"><div data-subtree="mfc"><div data-trnct="true"><div class="h7Tj7e"><div id="m-x-content" class="D5ad8b"><h2>AI による概要</h2><p>合成したAI内容です。</p></div></div></div></div></div></div></div><div id="fixture-more"><div role="button" aria-label="その他の AI による概要を表示" aria-expanded="false">もっと見る</div></div></div>';
+if(params.get('variant')==='async'){
+  const shell=holder.querySelector('#eKIzJc'),async=holder.querySelector('[data-subtree]'),frame=holder.querySelector('.h7Tj7e');
+  shell.removeAttribute('data-lhcontainer');shell.className='Wm5I1e SePcAf';
+  async.id='B2Jtyd';async.setAttribute('data-lhcontainer','1');async.setAttribute('data-async-type','folsrch');
+  frame.append(holder.querySelector('#fixture-more'));
+}
+const rso=document.querySelector('#rso');
+if(placement==='before')document.querySelector('#rcnt').prepend(holder);else rso.append(holder);
+if(placement==='mixed'){const ordinary=document.createElement('section');ordinary.className='ordinary-in-shell';ordinary.innerHTML='<h3>共有祖先内の通常結果（非表示禁止）</h3>';document.querySelector('#eKIzJc').prepend(ordinary)}
+const last=document.createElement('section');last.className='organic';last.id='last-result';last.innerHTML='<h3>通常の検索結果 2</h3><p>通常結果の順序と内容を維持します。</p>';rso.append(last);
+const card=new SearchCardView(()=>{});card.mount();
+const long=params.has('long'),blocks=long?Array.from({length:20},(_,i)=>({type:'paragraph',text:`確認段落 ${i+1}。これは長い回答の高さ制限を検査する合成文です。読みたいときだけ全体を展開し、検索結果へすぐ戻れるようにします。`})): [{type:'paragraph',text:'合成した回答。配置の確認だけに使い、GoogleやGeminiへ送信しません。'}];
+const fixtureState=params.get('state')??'answer';
+const readyOnly=['ready','submitting'].includes(fixtureState);
+card.render(readyOnly?{pipReady:true,...(fixtureState==='submitting'?{status:'Geminiに送信しています…'}:{})}:fixtureState==='initial'?{}:fixtureState==='attention'?{detail:'PiP小窓を表示してください。'}:{jobId:'fixture',conversationUrl:'https://gemini.google.com/app/fixturechat',...(params.has('stream')?{progressText:blocks.map(b=>b.text).join('\n\n')}:{answer:{jobId:'fixture',sourceTabId:1,completedAt:Date.now(),plainText:blocks.map(b=>b.text).join('\n'),blocks,links:[{label:'確認用の出典',url:'https://example.com/'}]}})});
+let overrides;
+if(params.has('legacy')){document.querySelector('#m-x-content').setAttribute('data-legacy-hide','');const original=document.querySelector('[data-native-ai]');original.setAttribute('data-legacy-hide','');const replacement=document.createElement('a');replacement.textContent='Gemini';replacement.href='https://gemini.google.com/app/fixturechat';replacement.setAttribute('data-legacy-gemini','');original.after(replacement)}
+else{overrides=new SearchOverrides();overrides.setConversationUrl('https://gemini.google.com/app/fixturechat')}
+function report(){
+  const shell=document.querySelector('#eKIzJc'),link=document.querySelector('[data-gsb-gemini-nav],[data-legacy-gemini]');
+  const all=document.querySelector('[data-native-all] span span'),inactive=document.querySelector('.olrp5b>a:last-child span span');
+  const label=link?.querySelector('[data-gsb-gemini-label]>span')??link?.querySelector('span span')??link;
+  const first=document.querySelector('#first-result'),last=document.querySelector('#last-result');
+  const visible=e=>!!e&&e.getClientRects().length>0&&getComputedStyle(e).visibility!=='hidden';
+  const aiHeight=Math.round(shell.getBoundingClientRect().height);
+  const delta=label&&all?Math.abs(label.getBoundingClientRect().top-all.getBoundingClientRect().top):null;
+  const preview=card.host.shadowRoot.querySelector('.preview'),toggle=card.host.shadowRoot.querySelector('button.expand');
+  const cap=Math.min(210,innerHeight*.275),expanded=toggle?.getAttribute('aria-expanded')==='true';
+  const overflowing=preview?preview.scrollHeight>cap+1:false,toggleVisible=visible(toggle);
+  const previewHeight=preview?.getBoundingClientRect().height??0;
+  const shadow=card.host.shadowRoot,owner=[...shadow.querySelectorAll('button')].find(b=>b.textContent==='Geminiウィンドウを開く');
+  const output=shadow.querySelector('.output'),conversation=shadow.querySelector('a.conversation');
+  const normal=fixtureState==='answer'||readyOnly,ownerFooter=owner.getBoundingClientRect().top>=output.getBoundingClientRect().bottom;
+  const article=shadow.querySelector('article'),articleStyle=getComputedStyle(article);
+  const ownerRightEdge=visible(output)?output.getBoundingClientRect().right:
+    article.getBoundingClientRect().right-parseFloat(articleStyle.paddingRight)-parseFloat(articleStyle.borderRightWidth);
+  const ownerRightDelta=Math.abs(owner.getBoundingClientRect().right-ownerRightEdge);
+  const conversationWidthDelta=conversation?Math.abs(conversation.getBoundingClientRect().width-output.getBoundingClientRect().width):null;
+  const actionOrder=[...shadow.querySelectorAll('a.conversation,button.expand')].filter(visible).map(e=>e.textContent);
+  const data={placement,variant:params.get('variant')??'original',width:innerWidth,aiHeight,
+    navLabelDelta:delta,navColor:label?getComputedStyle(label).color:null,
+    inactiveColor:inactive?getComputedStyle(inactive).color:null,
+    navUnderline:link?getComputedStyle(link,'::after').content:null,
+    iconCount:link?.querySelectorAll('img[aria-hidden="true"]').length,
+    firstVisible:visible(first),lastVisible:visible(last),moreVisible:visible(shell),
+    bodyOverflow:document.documentElement.scrollWidth>innerWidth,
+    originalHandlerCopied:link?.hasAttribute('onclick')??false,link:link?.href,
+    cardTop:Math.round(card.host.getBoundingClientRect().top),
+    previewHeight,cap,expanded,answerToggleVisible:toggleVisible,
+    shortToggleDisplay:toggle&&!toggleVisible?getComputedStyle(toggle).display:null,
+    actionOrder,ownerFooter,ownerRightDelta,ownerFontSize:getComputedStyle(owner).fontSize,conversationWidthDelta,
+    conversationVisible:visible(conversation),
+    actionPass:normal?ownerFooter&&ownerRightDelta<=1&&parseFloat(getComputedStyle(owner).fontSize)<14&&
+      (readyOnly?!conversation:overflowing&&!expanded?!visible(conversation)&&actionOrder.length===1&&actionOrder[0]==='もっと見る':
+        visible(conversation)&&conversationWidthDelta<=1&&actionOrder[0]==='Geminiを開いて会話を続ける'&&
+        (!expanded||actionOrder[1]==='折りたたむ')):!conversation&&parseFloat(getComputedStyle(owner).fontSize)>=14,
+    previewPass:!preview||toggleVisible===overflowing&&(expanded
+      ?getComputedStyle(preview).maxHeight==='none'&&previewHeight>=preview.scrollHeight-1
+      :previewHeight<=cap+1)};
+  data.pass=!params.has('legacy')&&data.firstVisible&&data.lastVisible&&!data.bodyOverflow&&
+    !data.originalHandlerCopied&&(placement==='mixed'?aiHeight>0:aiHeight===0)&&
+    delta!==null&&delta<=2&&data.navColor===data.inactiveColor&&data.navUnderline==='none'&&
+    data.iconCount===1&&data.previewPass&&data.actionPass;
+  document.querySelector('#fixture-result').textContent=JSON.stringify(data,null,2);
+  document.querySelector('#fixture-result').dataset.ready='true';
+}
+card.host.shadowRoot.addEventListener('click',()=>requestAnimationFrame(report));
+window.addEventListener('resize',report);setTimeout(report,250);
+</script></body></html>

@@ -1,0 +1,19 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>PiP-first UI preview</title><style>body{font:16px system-ui;margin:32px;background:white;color:#243149}#rso{max-width:680px;margin:24px auto}nav{max-width:680px;margin:auto;display:flex;gap:20px;border-bottom:1px solid #ddd;padding-bottom:16px}a{color:inherit}h2{font-size:21px;color:#1a0dab}</style></head>
+<body><nav id="hdtb"><a href="https://www.google.com/search?q=2%2B2">すべて</a><a href="https://www.google.com/search?q=2%2B2&udm=50">AI モード</a><a href="https://www.google.com/search?q=2%2B2&udm=2">画像</a></nav><div id="rso"><section><h2>いつもの検索結果</h2><p>この下には通常の検索結果が続きます。</p></section></div>
+<script type="module">
+import {SearchCardView} from '/src/content/google/card-view.ts';
+import {SearchOverrides} from '/src/content/google/search-overrides.ts';
+import {WorkerView} from '/src/userscript/worker-view.ts';
+import {PipCompanion} from '/src/userscript/pip.ts';
+const mode=new URL(location.href).searchParams.get('view');
+if(mode==='worker'){
+ const pip=new PipCompanion(window,()=>view.update({pipReady:pip.visible(),supported:pip.available}));
+ const view=new WorkerView({onOpenPip(){void pip.open().catch(()=>view.update({pipReady:false,supported:true,status:'PiPを開けませんでした。'}))},onClosePip(){pip.close()}});
+ pip.update('検索語を待っています','');view.update({pipReady:false,supported:pip.available});
+ window.preview={view,pip};
+}else{
+ const card=new SearchCardView(()=>{});card.mount();new SearchOverrides().setConversationUrl(mode==='answer'?'https://gemini.google.com/app/abc123':null);
+ if(mode==='answer')card.render({conversationUrl:'https://gemini.google.com/app/abc123',answer:{jobId:'preview',sourceTabId:1,completedAt:Date.now(),plainText:'検索を続けながら、Geminiの回答を。',blocks:[{type:'heading',level:2,text:'検索を続けながら、Geminiの回答を。'},{type:'paragraph',text:'PiP小窓を開いておけば、Geminiの途中回答もここへ届きます。設定を切り替える必要はありません。'},{type:'list',ordered:false,items:['小窓はすみっこに置いておけます。','Gemini本体は最小化できます。閉じないでください。']}],links:[]}});
+ window.preview={card};
+}
+</script></body></html>

@@ -1,13 +1,15 @@
 import { isStructuredAnswer, MAX_ANSWER_TEXT_LENGTH, type StructuredAnswer } from "../shared/answer-models";
 import { isJobStatus, isQueryJob, type JobStatus, type QueryJob } from "../shared/query-models";
 import { readGoogleQuery } from "../content/google/query-observer";
+import { sanitizeConversationUrl } from "../shared/conversation-url";
 
-export const REQUEST_KEY = "gsb-userscript:request";
-export const REPLY_KEY = "gsb-userscript:reply";
-export const WORKER_KEY = "gsb-userscript:worker";
-export const SETTINGS_KEY = "gsb-userscript:settings";
-export const FOCUS_KEY = "gsb-userscript:focus";
-export const FOCUS_ACK_KEY = "gsb-userscript:focus-ack";
+export const REQUEST_KEY = "gsb-userscript:v4:request";
+export const REPLY_KEY = "gsb-userscript:v4:reply";
+export const WORKER_KEY = "gsb-userscript:v4:worker";
+export const SETTINGS_KEY = "gsb-userscript:v4:settings";
+export const FOCUS_KEY = "gsb-userscript:v4:focus";
+export const FOCUS_ACK_KEY = "gsb-userscript:v4:focus-ack";
+export const RECEIPTS_KEY = "gsb-userscript:v4:receipts";
 export const FOCUS_MAX_AGE_MS = 10_000;
 export const MAX_JOB_AGE_MS = 300_000;
 export const WORKER_MAX_AGE_MS = 20_000;
@@ -15,7 +17,7 @@ export const WORKER_MAX_AGE_MS = 20_000;
 export interface UserscriptRequest {
   workerId: string;
   job: QueryJob;
-  usePip?: boolean;
+  version: 4;
 }
 
 export interface UserscriptReply {
@@ -26,6 +28,7 @@ export interface UserscriptReply {
   detail?: string;
   answer?: StructuredAnswer;
   progressText?: string;
+  conversationUrl?: string;
 }
 
 export interface UserscriptWorker {
@@ -34,6 +37,8 @@ export interface UserscriptWorker {
   visible: boolean;
   busy: boolean;
   pipReady?: boolean;
+  protocolVersion?: number;
+  activeJobId?: string;
 }
 
 export interface UserscriptFocusRequest {
@@ -58,7 +63,7 @@ export function isWorkerId(value: unknown): value is string {
 
 export function isUserscriptRequest(value: unknown): value is UserscriptRequest {
   return record(value) && isWorkerId(value.workerId) && isQueryJob(value.job) &&
-    (value.usePip === undefined || typeof value.usePip === "boolean") &&
+    value.version === 4 &&
     readGoogleQuery(value.job.sourceUrl) === value.job.query;
 }
 
@@ -67,7 +72,9 @@ export function isUserscriptReply(value: unknown): value is UserscriptReply {
       !Number.isInteger(value.sourceTabId) || typeof value.sourceTabId !== "number" || value.sourceTabId < 1 ||
       !isJobStatus(value.status) || typeof value.updatedAt !== "number" || !Number.isFinite(value.updatedAt) || value.updatedAt <= 0 ||
       (value.detail !== undefined && (typeof value.detail !== "string" || value.detail.length > 500)) ||
-      (value.progressText !== undefined && (value.status !== "generating" || typeof value.progressText !== "string" || value.progressText.length > MAX_ANSWER_TEXT_LENGTH))) {
+      (value.progressText !== undefined && (value.status !== "generating" || typeof value.progressText !== "string" || value.progressText.length > MAX_ANSWER_TEXT_LENGTH)) ||
+      (value.conversationUrl !== undefined && (sanitizeConversationUrl(value.conversationUrl) !== value.conversationUrl ||
+        (value.status !== "generating" && value.status !== "completed")))) {
     return false;
   }
   return value.status === "completed"

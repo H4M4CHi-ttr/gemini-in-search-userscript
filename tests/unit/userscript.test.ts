@@ -9,6 +9,7 @@ const now = 1_800_000_000_000;
 const workerId = "11111111-2222-3333-4444-555555555555";
 const request = {
   workerId,
+  version: 4,
   job: {
     id: "test-job", sourceTabId: 42, query: "2+2", sourceUrl: "https://www.google.com/search?q=2%2B2",
     createdAt: now, mode: "manual", conversationMode: "new_chat", promptMode: "raw",
@@ -26,8 +27,8 @@ describe("userscript cross-tab bridge", () => {
     expect(isUserscriptRequest({ ...request, job: { ...request.job, query: "3+3" } })).toBe(false);
     expect(isUserscriptRequest({ ...request, job: { ...request.job, sourceUrl: "https://example.com/search?q=2%2B2" } })).toBe(false);
     expect(isUserscriptRequest({ ...request, workerId: "unrelated-window" })).toBe(false);
-    expect(isUserscriptRequest({ ...request, usePip: true })).toBe(true);
-    expect(isUserscriptRequest({ ...request, usePip: "true" })).toBe(false);
+    expect(isUserscriptRequest({ ...request, version: 3 })).toBe(false);
+    expect(isUserscriptRequest({ ...request, version: undefined })).toBe(false);
   });
 
   it("rejects expired or future requests instead of replaying stored search queries", () => {
@@ -42,6 +43,9 @@ describe("userscript cross-tab bridge", () => {
     expect(isUserscriptReply({ ...reply, answer: { ...answer, jobId: "other-job" } })).toBe(false);
     expect(isUserscriptReply({ ...reply, answer: { ...answer, sourceTabId: 43 } })).toBe(false);
     expect(isUserscriptReply({ ...reply, answer: { ...answer, links: [{ label: "unsafe", url: "javascript:alert(1)" }] } })).toBe(false);
+    expect(isUserscriptReply({ ...reply, conversationUrl: "https://gemini.google.com/app/abc123" })).toBe(true);
+    expect(isUserscriptReply({ ...reply, conversationUrl: "https://gemini.google.com/app" })).toBe(false);
+    expect(isUserscriptReply({ ...reply, conversationUrl: "https://example.com/app/abc123" })).toBe(false);
   });
 
   it("accepts bounded status updates without accepting premature answers", () => {

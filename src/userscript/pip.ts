@@ -47,7 +47,7 @@ export class PipCompanion {
       const doc = pip.document;
       doc.title = "Gemini Search Bridge";
       const style = doc.createElement("style");
-      style.textContent = "body{margin:12px;background:Canvas;color:CanvasText;font:14px/1.5 system-ui,sans-serif}h1{font-size:16px;margin:0 0 8px}p{margin:0 0 8px}pre{font:inherit;white-space:pre-wrap;overflow-wrap:anywhere}button{font:inherit;padding:4px 8px}";
+      style.textContent = "html{color-scheme:light}*{box-sizing:border-box}body{margin:0;padding:18px;background:#F2F5FC;color:#243149;font:13px/1.6 system-ui,-apple-system,'Yu Gothic UI',Meiryo,sans-serif}h1{font-size:13px;font-weight:700;letter-spacing:.02em;margin:0 0 14px;padding-bottom:10px;border-bottom:1px solid #D8E0EF}p{margin:0 0 12px;color:#415FC8;font-weight:650}pre{font:inherit;white-space:pre-wrap;overflow-wrap:anywhere;margin:14px 0 0;padding-top:12px;border-top:1px solid #D8E0EF;color:#243149}pre:empty{display:none}button{font:inherit;padding:6px 10px;border:1px solid #D8E0EF;border-radius:7px;background:white;color:#415FC8;cursor:pointer}button:hover{border-color:#415FC8}button:focus-visible{outline:3px solid #415FC8;outline-offset:3px}@media(prefers-reduced-motion:reduce){*{transition:none!important}}";
       doc.head.append(style);
       const heading = doc.createElement("h1");
       heading.textContent = "Gemini Search Bridge";

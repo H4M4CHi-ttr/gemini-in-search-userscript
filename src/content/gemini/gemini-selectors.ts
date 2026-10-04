@@ -1,4 +1,4 @@
-import type { LoginState } from "../../shared/phase0-messages";
+export type LoginState = "logged_in" | "logged_out" | "unknown";
 
 export const GEMINI_SELECTORS = {
   promptInputs: [

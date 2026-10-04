@@ -5,7 +5,7 @@ import {
   GEMINI_SELECTORS,
   type SelectorMatch,
 } from "./gemini-selectors";
-import type { LoginState } from "../../shared/phase0-messages";
+import type { LoginState } from "./gemini-selectors";
 
 const READY_TIMEOUT_MS = 20_000;
 const NEW_CHAT_TIMEOUT_MS = 8_000;
