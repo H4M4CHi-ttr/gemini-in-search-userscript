@@ -8,3 +8,4 @@ declare function GM_addValueChangeListener(
 declare function GM_getTab(callback: (tab: Record<string, unknown>) => void): void;
 declare function GM_saveTab(tab: Record<string, unknown>): void;
 declare function GM_getTabs(callback: (tabs: Record<string, Record<string, unknown>>) => void): void;
+declare function GM_registerMenuCommand(label: string, callback: () => void): number | string;

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { MAX_ANSWER_TEXT_LENGTH } from "../../src/shared/answer-models";
 import { PipCompanion } from "../../src/userscript/pip";
 
@@ -20,6 +20,7 @@ class FakeDocument extends EventTarget {
   visibilityState = "visible";
   head = new FakeElement("head");
   body = new FakeElement("body");
+  documentElement = { lang: "" };
   createElement = vi.fn((name: string) => new FakeElement(name));
 }
 
@@ -52,7 +53,27 @@ function element(pip: FakeWindow, tagName: string): FakeElement {
   return found;
 }
 
+beforeEach(() => vi.stubGlobal("navigator", { language: "ja" }));
+afterEach(() => vi.unstubAllGlobals());
+
 describe("userscript Document Picture-in-Picture companion", () => {
+  it("refreshes the current PiP language without reopening or rewriting the transcript", async () => {
+    vi.stubGlobal("navigator", { language: "en" });
+    const { companion, api, pip } = fixture();
+    companion.update("回答が完了しました", "日本語本文");
+    await companion.open();
+    expect(pip.document.documentElement.lang).toBe("en");
+    expect(element(pip, "button").textContent).toBe("Return to Gemini");
+    expect(element(pip, "p").textContent).toBe("Answer complete");
+    const transcript = element(pip, "pre");
+    vi.stubGlobal("navigator", { language: "ja" });
+    companion.refreshLanguage();
+    expect(pip.document.documentElement.lang).toBe("ja");
+    expect(element(pip, "button").textContent).toBe("Geminiに戻る");
+    expect(element(pip, "pre")).toBe(transcript);
+    expect(transcript.textContent).toBe("日本語本文");
+    expect(api.requestWindow).toHaveBeenCalledOnce();
+  });
   it("does not open automatically and reports unsupported native API without changing Gemini", async () => {
     const owner = new FakeWindow();
     const changed = vi.fn();

@@ -3,12 +3,13 @@ import { SearchOverrides } from "../content/google/search-overrides";
 import { observeGoogleQuery, readGoogleQuery } from "../content/google/query-observer";
 import { createQueryJob, isPositiveTabId, isQueryJob, type QueryJob } from "../shared/query-models";
 import { consentAccepted, documentReady } from "./settings";
-import { SearchQueue, searchSignature } from "./search-queue";
+import { SearchQueue, searchSignature, type PendingSearch } from "./search-queue";
 import { readReceipt } from "./receipts";
+import { formatPrompt, PREFERENCES_KEY, MAX_PROMPT_LENGTH } from "./preferences";
 import {
   REQUEST_KEY, REPLY_KEY, WORKER_KEY, SETTINGS_KEY, RECEIPTS_KEY, MAX_JOB_AGE_MS, FOCUS_KEY, FOCUS_ACK_KEY,
-  isUserscriptReply, isUserscriptRequest, pendingRequest, liveWorker, storedWorker, isFocusAck,
-  type UserscriptReply, type UserscriptRequest, type UserscriptFocusRequest,
+  isUserscriptReply, isUserscriptRequest, isUserscriptJob, pendingRequest, liveWorker, storedWorker, isFocusAck,
+  type UserscriptReply, type UserscriptRequest, type UserscriptFocusRequest, type UserscriptJob,
 } from "./protocol";
 
 const GEMINI_APP = "https://gemini.google.com/app";
@@ -24,16 +25,24 @@ export async function startGoogle(tab: Record<string, unknown>): Promise<void> {
       readGoogleQuery(value.sourceUrl) === value.query ? value : null;
   }
   const storedJob = savedJob(tab.gsbV4ActiveJob);
-  let job: QueryJob | null = storedJob && Date.now() >= storedJob.createdAt &&
+  let job: UserscriptJob | null = storedJob && isUserscriptJob(storedJob) && Date.now() >= storedJob.createdAt &&
     Date.now() - storedJob.createdAt < MAX_JOB_AGE_MS ? storedJob : null;
   const queue = new SearchQueue(typeof tab.gsbV4LastDispatched === "string" ? tab.gsbV4LastDispatched : null);
   if (storedJob && !job) queue.lastDispatched = searchSignature(storedJob);
+  const savedPending = tab.gsbV5PendingSearch;
+  if (typeof savedPending === "object" && savedPending !== null) {
+    const value = savedPending as Partial<PendingSearch>;
+    if (typeof value.query === "string" && typeof value.sourceUrl === "string" &&
+        readGoogleQuery(value.sourceUrl) === value.query && typeof value.promptText === "string" &&
+        value.promptText.trim() && value.promptText.length <= MAX_PROMPT_LENGTH) queue.offer(value as PendingSearch);
+  }
   const storedLastJob = savedJob(tab.gsbV4LastJob) ?? storedJob;
   let lastJob = storedLastJob && Date.now() >= storedLastJob.createdAt &&
     Date.now() - storedLastJob.createdAt < MAX_JOB_AGE_MS ? storedLastJob : null;
   let reply: UserscriptReply | null = null;
   let acknowledged = job !== null && tab.gsbV4AcknowledgedJob === job.id;
-  let detail: string | undefined;
+  let detail: string | undefined = storedJob && !isUserscriptJob(storedJob)
+    ? "更新前の検索は自動再送信しません。Geminiで送信状況を確認してから、必要なら「この検索を再送信」を押してください。" : undefined;
   let opening = false;
   let opened = false;
   let popup: Window | null = null;
@@ -59,6 +68,7 @@ export async function startGoogle(tab: Record<string, unknown>): Promise<void> {
     tab.gsbV4LastDispatched = queue.lastDispatched;
     tab.gsbV4AcknowledgedJob = acknowledged && job ? job.id : null;
     tab.gsbV4LastJob = lastJob;
+    tab.gsbV5PendingSearch = queue.pending;
     GM_saveTab(tab);
   }
   function render(): void {
@@ -74,33 +84,44 @@ export async function startGoogle(tab: Record<string, unknown>): Promise<void> {
       ? "前の結果を復元できません。検索語は再送信していません。Geminiで送信状況を確認してから、必要なら「この検索を再送信」を押してください。"
       : queue.pending && existing && !worker
         ? "接続を確認できていません。「Geminiウィンドウを開く」で本体を表示してください。検索語は再送信しません。" : undefined;
-    const message = detail ?? reply?.detail ?? recoveryDetail;
+    const protocolDetail = existing && existing.protocolVersion !== 5
+      ? "既存のGeminiウィンドウを再読み込みし、PiPを開き直してください。更新前のウィンドウには送信しません。" : undefined;
+    const message = detail ?? reply?.detail ?? protocolDetail ?? recoveryDetail;
     card.render({
       jobId: job?.id ?? reply?.jobId ?? reply?.answer?.jobId,
       ...(status ? { status } : {}), ...(message ? { detail: message } : {}),
       ...(reply?.progressText ? { progressText: reply.progressText } : {}),
       ...(reply?.answer ? { answer: reply.answer } : {}), conversationUrl: reply?.conversationUrl ?? null,
       busy: opening,
-      pipReady: consentAccepted() && worker?.protocolVersion === 4 && worker.pipReady === true,
+      pipReady: consentAccepted() && worker?.protocolVersion === 5 && worker.pipReady === true,
       canRetry: !job && !opening && (consumedWithoutResult || !!reply && reply.status !== "completed" && TERMINAL.has(reply.status)),
     });
     overrides.setConversationUrl(reply?.conversationUrl ?? null);
   }
   function offerCurrent(): void {
     const query = readGoogleQuery();
-    queue.offer(query ? { query, sourceUrl: location.href } : null);
+    const search = query ? { query, sourceUrl: location.href } : null;
+    if (search && queue.pending && searchSignature(search) === searchSignature(queue.pending)) return;
+    if (!search || searchSignature(search) === queue.lastDispatched) { queue.offer(null); save(); return; }
+    try {
+      queue.offer({ ...search, promptText: formatPrompt(search.query) });
+    } catch (error) {
+      queue.offer(null);
+      detail = error instanceof Error ? error.message : "Geminiへの送信を開始できませんでした。";
+    }
+    save();
   }
   function dispatchLatest(): void {
     const worker = liveWorker(GM_getValue(WORKER_KEY, null));
     const shared = pendingRequest(GM_getValue(REQUEST_KEY, null));
     if (job && !acknowledged) {
       if (readReceipt(job)) acknowledge();
-      else if (!shared && worker?.pipReady && !worker.busy && consentAccepted()) {
+      else if (!shared && worker?.protocolVersion === 5 && worker.pipReady && !worker.busy && consentAccepted()) {
         // Re-offer the SAME id. A durable worker receipt prevents duplicates after missed events.
-        GM_setValue(REQUEST_KEY, { workerId: worker.id, job, version: 4 } satisfies UserscriptRequest);
+        GM_setValue(REQUEST_KEY, { workerId: worker.id, job, version: 5 } satisfies UserscriptRequest);
       }
     }
-    if (job || !queue.pending || !consentAccepted() || !worker?.pipReady || worker.protocolVersion !== 4 || worker.busy ||
+    if (job || !queue.pending || !consentAccepted() || !worker?.pipReady || worker.protocolVersion !== 5 || worker.busy ||
         pendingRequest(GM_getValue(REQUEST_KEY, null))) { render(); return; }
     startPending(worker.id, "auto");
   }
@@ -108,10 +129,10 @@ export async function startGoogle(tab: Record<string, unknown>): Promise<void> {
     const next = queue.pending;
     if (!next || job) return;
     try {
-      job = createQueryJob({ sourceTabId, query: next.query, sourceUrl: next.sourceUrl, mode, promptMode: "raw" });
+      job = { ...createQueryJob({ sourceTabId, query: next.query, sourceUrl: next.sourceUrl, mode, promptMode: "raw" }), promptText: next.promptText };
       // Keep the pending slot until the sole worker acknowledges this job.
       acknowledged = false; reply = null; detail = undefined; save();
-      GM_setValue(REQUEST_KEY, { workerId, job, version: 4 } satisfies UserscriptRequest);
+      GM_setValue(REQUEST_KEY, { workerId, job, version: 5 } satisfies UserscriptRequest);
     } catch (error) {
       detail = error instanceof Error ? error.message : "Geminiへの送信を開始できませんでした。";
       // A storage failure can have an uncertain delivery outcome; never make a fresh id for it.
@@ -124,13 +145,14 @@ export async function startGoogle(tab: Record<string, unknown>): Promise<void> {
     const query = readGoogleQuery();
     const worker = liveWorker(GM_getValue(WORKER_KEY, null));
     if (!query || job) return;
-    if (!consentAccepted() || !worker?.pipReady || worker.protocolVersion !== 4 || worker.busy ||
+    if (!consentAccepted() || !worker?.pipReady || worker.protocolVersion !== 5 || worker.busy ||
         pendingRequest(GM_getValue(REQUEST_KEY, null))) {
       detail = "Geminiの必要な操作を済ませ、PiPを表示し、実行中の回答が終わってから再送信してください。";
       render(); return;
     }
     // Only this explicit click offers a consumed query again. Keep its old receipt/signature.
-    queue.pending = { query, sourceUrl: location.href };
+    try { queue.pending = { query, sourceUrl: location.href, promptText: formatPrompt(query) }; }
+    catch (error) { detail = error instanceof Error ? error.message : "Geminiへの送信を開始できませんでした。"; render(); return; }
     startPending(worker.id, "manual");
   }
   function acknowledge(): void {
@@ -208,6 +230,13 @@ export async function startGoogle(tab: Record<string, unknown>): Promise<void> {
   GM_addValueChangeListener(WORKER_KEY, dispatchLatest);
   GM_addValueChangeListener(REQUEST_KEY, dispatchLatest);
   GM_addValueChangeListener(SETTINGS_KEY, dispatchLatest);
+  function preferencesChanged(): void {
+    overrides.refreshLanguage();
+    // Never re-offer the current query here: pending/submitted prompts stay frozen.
+    render(); dispatchLatest();
+  }
+  GM_addValueChangeListener(PREFERENCES_KEY, preferencesChanged);
+  window.addEventListener("gsb-preferences-changed", preferencesChanged);
   GM_addValueChangeListener(RECEIPTS_KEY, () => {
     if (job) { const entry = readReceipt(job); if (entry?.reply) receiveReply(entry.reply); }
     restoreDisplayedReply();

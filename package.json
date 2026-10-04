@@ -1,6 +1,6 @@
 {
-  "name": "gemini-search-bridge-userscript",
-  "version": "0.4.7",
+  "name": "gemini-in-search-userscript",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "scripts": {

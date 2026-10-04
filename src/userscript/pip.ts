@@ -1,4 +1,6 @@
 import { MAX_ANSWER_TEXT_LENGTH } from "../shared/answer-models";
+import { translate } from "./i18n";
+import { getLanguage } from "./preferences";
 
 interface DocumentPictureInPicture {
   readonly window: Window | null;
@@ -9,6 +11,7 @@ export class PipCompanion {
   private pipWindow: Window | null = null;
   private statusElement: HTMLElement | null = null;
   private transcriptElement: HTMLElement | null = null;
+  private returnButton: HTMLButtonElement | null = null;
   private status = "";
   private transcript = "";
   private opening = false;
@@ -45,6 +48,7 @@ export class PipCompanion {
       if (attempt !== this.openAttempt) { pip.close(); return; }
       this.pipWindow = pip;
       const doc = pip.document;
+      doc.documentElement.lang = getLanguage();
       doc.title = "Gemini Search Bridge";
       const style = doc.createElement("style");
       style.textContent = "html{color-scheme:light}*{box-sizing:border-box}body{margin:0;padding:18px;background:#F2F5FC;color:#243149;font:13px/1.6 system-ui,-apple-system,'Yu Gothic UI',Meiryo,sans-serif}h1{font-size:13px;font-weight:700;letter-spacing:.02em;margin:0 0 14px;padding-bottom:10px;border-bottom:1px solid #D8E0EF}p{margin:0 0 12px;color:#415FC8;font-weight:650}pre{font:inherit;white-space:pre-wrap;overflow-wrap:anywhere;margin:14px 0 0;padding-top:12px;border-top:1px solid #D8E0EF;color:#243149}pre:empty{display:none}button{font:inherit;padding:6px 10px;border:1px solid #D8E0EF;border-radius:7px;background:white;color:#415FC8;cursor:pointer}button:hover{border-color:#415FC8}button:focus-visible{outline:3px solid #415FC8;outline-offset:3px}@media(prefers-reduced-motion:reduce){*{transition:none!important}}";
@@ -55,9 +59,9 @@ export class PipCompanion {
       this.statusElement.setAttribute("role", "status");
       this.transcriptElement = doc.createElement("pre");
       this.transcriptElement.setAttribute("aria-live", "off");
-      const returnButton = doc.createElement("button");
+      const returnButton = this.returnButton = doc.createElement("button");
       returnButton.type = "button";
-      returnButton.textContent = "Geminiに戻る";
+      returnButton.textContent = translate("Geminiに戻る");
       returnButton.addEventListener("click", () => this.owner.focus());
       doc.body.replaceChildren(heading, this.statusElement, returnButton, this.transcriptElement);
       doc.addEventListener("visibilitychange", () => {
@@ -79,6 +83,7 @@ export class PipCompanion {
     this.pipWindow = null;
     this.statusElement = null;
     this.transcriptElement = null;
+    this.returnButton = null;
     this.onVisibilityChanged();
   }
 
@@ -93,7 +98,13 @@ export class PipCompanion {
   update(status: string, text: string): void {
     this.status = status;
     this.transcript = text.slice(0, MAX_ANSWER_TEXT_LENGTH);
-    if (this.statusElement) this.statusElement.textContent = this.status;
+    this.refreshLanguage();
     if (this.transcriptElement) this.transcriptElement.textContent = this.transcript;
+  }
+
+  refreshLanguage(): void {
+    if (this.pipWindow) this.pipWindow.document.documentElement.lang = getLanguage();
+    if (this.returnButton) this.returnButton.textContent = translate("Geminiに戻る");
+    if (this.statusElement) this.statusElement.textContent = translate(this.status);
   }
 }

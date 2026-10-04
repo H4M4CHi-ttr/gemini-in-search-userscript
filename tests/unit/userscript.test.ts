@@ -9,10 +9,11 @@ const now = 1_800_000_000_000;
 const workerId = "11111111-2222-3333-4444-555555555555";
 const request = {
   workerId,
-  version: 4,
+  version: 5,
   job: {
     id: "test-job", sourceTabId: 42, query: "2+2", sourceUrl: "https://www.google.com/search?q=2%2B2",
     createdAt: now, mode: "manual", conversationMode: "new_chat", promptMode: "raw",
+    promptText: "Search the web and cite your sources: 2+2",
   },
 };
 const answer = {
@@ -28,7 +29,15 @@ describe("userscript cross-tab bridge", () => {
     expect(isUserscriptRequest({ ...request, job: { ...request.job, sourceUrl: "https://example.com/search?q=2%2B2" } })).toBe(false);
     expect(isUserscriptRequest({ ...request, workerId: "unrelated-window" })).toBe(false);
     expect(isUserscriptRequest({ ...request, version: 3 })).toBe(false);
+    expect(isUserscriptRequest({ ...request, version: 4 })).toBe(false);
     expect(isUserscriptRequest({ ...request, version: undefined })).toBe(false);
+  });
+
+  it("requires a bounded complete prompt snapshot without silently accepting raw legacy jobs", () => {
+    for (const promptText of [undefined, "", "  ", "x".repeat(16_385)]) {
+      expect(isUserscriptRequest({ ...request, job: { ...request.job, promptText } })).toBe(false);
+    }
+    expect(isUserscriptRequest({ ...request, job: { ...request.job, promptText: "x".repeat(16_384) } })).toBe(true);
   });
 
   it("rejects expired or future requests instead of replaying stored search queries", () => {

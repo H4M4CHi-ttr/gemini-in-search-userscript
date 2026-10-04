@@ -5,11 +5,16 @@ import {SearchCardView} from '/src/content/google/card-view.ts';
 import {SearchOverrides} from '/src/content/google/search-overrides.ts';
 import {WorkerView} from '/src/userscript/worker-view.ts';
 import {PipCompanion} from '/src/userscript/pip.ts';
-const mode=new URL(location.href).searchParams.get('view');
+import {translate} from '/src/userscript/i18n.ts';
+const params=new URL(location.href).searchParams,mode=params.get('view');
+let preferences={version:1,language:params.get('lang')==='en'?'en':'ja',promptTemplate:null};
+globalThis.GM_getValue=(key,fallback)=>key==='gsb-userscript:preferences'?preferences:fallback;
+globalThis.GM_setValue=(key,value)=>{if(key==='gsb-userscript:preferences')preferences=value};
 if(mode==='worker'){
  const pip=new PipCompanion(window,()=>view.update({pipReady:pip.visible(),supported:pip.available}));
  const view=new WorkerView({onOpenPip(){void pip.open().catch(()=>view.update({pipReady:false,supported:true,status:'PiPを開けませんでした。'}))},onClosePip(){pip.close()}});
  pip.update('検索語を待っています','');view.update({pipReady:false,supported:pip.available});
+ window.addEventListener('gsb-preferences-changed',()=>{view.update({pipReady:pip.visible(),supported:pip.available});pip.refreshLanguage()});
  window.preview={view,pip};
 }else{
  const card=new SearchCardView(()=>{});card.mount();new SearchOverrides().setConversationUrl(mode==='answer'?'https://gemini.google.com/app/abc123':null);

@@ -1,6 +1,7 @@
-export interface PendingSearch { query: string; sourceUrl: string }
+export interface SearchIdentity { query: string; sourceUrl: string }
+export interface PendingSearch extends SearchIdentity { promptText: string }
 
-export function searchSignature(search: PendingSearch): string {
+export function searchSignature(search: SearchIdentity): string {
   const url = new URL(search.sourceUrl);
   // Ignore Google's changing telemetry parameters, not the actual search text.
   return `${url.origin}${url.pathname}\n${search.query}`;
@@ -12,6 +13,7 @@ export class SearchQueue {
   constructor(public lastDispatched: string | null = null) {}
 
   offer(search: PendingSearch | null): void {
+    if (search && this.pending && searchSignature(search) === searchSignature(this.pending)) return;
     this.pending = search && searchSignature(search) !== this.lastDispatched ? search : null;
   }
 

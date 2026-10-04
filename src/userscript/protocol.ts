@@ -2,8 +2,10 @@ import { isStructuredAnswer, MAX_ANSWER_TEXT_LENGTH, type StructuredAnswer } fro
 import { isJobStatus, isQueryJob, type JobStatus, type QueryJob } from "../shared/query-models";
 import { readGoogleQuery } from "../content/google/query-observer";
 import { sanitizeConversationUrl } from "../shared/conversation-url";
+import { MAX_PROMPT_LENGTH } from "./preferences";
 
-export const REQUEST_KEY = "gsb-userscript:v4:request";
+export const LEGACY_REQUEST_KEY = "gsb-userscript:v4:request";
+export const REQUEST_KEY = "gsb-userscript:v5:request";
 export const REPLY_KEY = "gsb-userscript:v4:reply";
 export const WORKER_KEY = "gsb-userscript:v4:worker";
 export const SETTINGS_KEY = "gsb-userscript:v4:settings";
@@ -14,10 +16,12 @@ export const FOCUS_MAX_AGE_MS = 10_000;
 export const MAX_JOB_AGE_MS = 300_000;
 export const WORKER_MAX_AGE_MS = 20_000;
 
+export type UserscriptJob = QueryJob & { promptText: string };
+
 export interface UserscriptRequest {
   workerId: string;
-  job: QueryJob;
-  version: 4;
+  job: UserscriptJob;
+  version: 5;
 }
 
 export interface UserscriptReply {
@@ -61,9 +65,14 @@ export function isWorkerId(value: unknown): value is string {
   return typeof value === "string" && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value);
 }
 
+export function isUserscriptJob(value: unknown): value is UserscriptJob {
+  return isQueryJob(value) && "promptText" in value && typeof value.promptText === "string" &&
+    value.promptText.trim().length > 0 && value.promptText.length <= MAX_PROMPT_LENGTH;
+}
+
 export function isUserscriptRequest(value: unknown): value is UserscriptRequest {
-  return record(value) && isWorkerId(value.workerId) && isQueryJob(value.job) &&
-    value.version === 4 &&
+  return record(value) && isWorkerId(value.workerId) && isUserscriptJob(value.job) &&
+    value.version === 5 &&
     readGoogleQuery(value.job.sourceUrl) === value.job.query;
 }
 

@@ -1,5 +1,7 @@
 import { isAnswerBlock, sanitizeHttpUrl, type AnswerBlock, type StructuredAnswer } from "../../shared/answer-models";
 import { sanitizeConversationUrl } from "../../shared/conversation-url";
+import { translate } from "../../userscript/i18n";
+import { getLanguage } from "../../userscript/preferences";
 
 export interface SearchCardState {
   jobId?: string | undefined;
@@ -108,9 +110,9 @@ export class SearchCardView {
     const shadow = this.host.attachShadow({ mode: "open" });
     const style = textElement("style", CARD_CSS);
     const card = this.card = document.createElement("article");
-    card.lang = "ja";
+    card.lang = getLanguage();
     card.setAttribute("aria-label", "Gemini");
-    this.button = textElement("button", "Geminiウィンドウを開く", "owner");
+    this.button = textElement("button", translate("Geminiウィンドウを開く"), "owner");
     this.button.type = "button";
     this.button.addEventListener("click", onOpen);
     this.output = document.createElement("div");
@@ -140,9 +142,11 @@ export class SearchCardView {
   remove(): void { this.previewObserver?.disconnect(); this.host.remove(); }
 
   render(state: SearchCardState = {}): void {
-    const signature = JSON.stringify(state);
+    const signature = JSON.stringify([getLanguage(), state]);
     if (signature === this.lastState) return;
     this.lastState = signature;
+    this.card.lang = getLanguage();
+    this.button.textContent = translate("Geminiウィンドウを開く");
     const jobId = state.jobId ?? state.answer?.jobId;
     if (jobId !== this.currentJob || !state.answer && !state.progressText) this.expanded = false;
     this.currentJob = jobId;
@@ -164,13 +168,13 @@ export class SearchCardView {
     // Opening the owner remains available while it is generating.
     this.button.setAttribute("aria-busy", String(state.busy === true));
     if (state.status) {
-      const status = textElement("p", state.status, "status");
+      const status = textElement("p", translate(state.status), "status");
       status.setAttribute("role", "status");
       nodes.push(status);
     }
-    if (state.detail) nodes.push(textElement("p", state.detail, "detail"));
+    if (state.detail) nodes.push(textElement("p", translate(state.detail), "detail"));
     if (state.canRetry && this.onRetry) {
-      const retry = textElement("button", "この検索を再送信", "retry");
+      const retry = textElement("button", translate("この検索を再送信"), "retry");
       retry.type = "button";
       retry.addEventListener("click", this.onRetry);
       nodes.push(retry);
@@ -193,7 +197,7 @@ export class SearchCardView {
         list.append(item);
       }
       if (list.childElementCount) {
-        sources.append(textElement("p", "出典"), list);
+        sources.append(textElement("p", translate("出典")), list);
         body.append(sources);
       }
     } else if (state.progressText) {
@@ -207,7 +211,7 @@ export class SearchCardView {
       preview.className = "preview";
       preview.id = "gemini-answer-preview";
       preview.append(body);
-      expander = textElement("button", "もっと見る", "expand");
+      expander = textElement("button", translate("もっと見る"), "expand");
       expander.type = "button";
       expander.hidden = true;
       expander.setAttribute("aria-controls", preview.id);
@@ -215,7 +219,7 @@ export class SearchCardView {
     }
     const url = sanitizeConversationUrl(state.conversationUrl);
     if (url) {
-      conversation = externalLink("Geminiを開いて会話を続ける", url);
+      conversation = externalLink(translate("Geminiを開いて会話を続ける"), url);
       conversation.className = "conversation";
       nodes.push(conversation);
     }
@@ -231,7 +235,7 @@ export class SearchCardView {
         const overflowing = viewport.scrollHeight > Math.min(210, window.innerHeight * 0.275) + 1;
         const clipped = overflowing && !this.expanded;
         const expanded = String(this.expanded);
-        const label = this.expanded ? "折りたたむ" : "もっと見る";
+        const label = translate(this.expanded ? "折りたたむ" : "もっと見る");
         if (viewport.dataset.expanded !== expanded) viewport.dataset.expanded = expanded;
         if (viewport.dataset.clipped !== String(clipped)) viewport.dataset.clipped = String(clipped);
         if (sources && sources.inert !== clipped) sources.inert = clipped;

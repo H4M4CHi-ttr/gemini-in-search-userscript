@@ -15,7 +15,10 @@
 <script type="module">
 import {SearchOverrides} from '/src/content/google/search-overrides.ts';
 import {SearchCardView} from '/src/content/google/card-view.ts';
+import {translate} from '/src/userscript/i18n.ts';
 const params=new URL(location.href).searchParams, placement=params.get('placement')??'inside';
+const preferences={version:1,language:params.get('lang')==='en'?'en':'ja',promptTemplate:null};
+globalThis.GM_getValue=(key,fallback)=>key==='gsb-userscript:preferences'?preferences:fallback;
 const holder=document.createElement('div');holder.className='MjjYud';
 holder.innerHTML='<div id="eKIzJc" class="SePcAf" data-lhcontainer="1"><style></style><div class="YzCcne"><div class="hdzaWe"><div class="EyBRub"><div data-subtree="mfc"><div data-trnct="true"><div class="h7Tj7e"><div id="m-x-content" class="D5ad8b"><h2>AI による概要</h2><p>合成したAI内容です。</p></div></div></div></div></div></div></div><div id="fixture-more"><div role="button" aria-label="その他の AI による概要を表示" aria-expanded="false">もっと見る</div></div></div>';
 if(params.get('variant')==='async'){
@@ -48,7 +51,7 @@ function report(){
   const cap=Math.min(210,innerHeight*.275),expanded=toggle?.getAttribute('aria-expanded')==='true';
   const overflowing=preview?preview.scrollHeight>cap+1:false,toggleVisible=visible(toggle);
   const previewHeight=preview?.getBoundingClientRect().height??0;
-  const shadow=card.host.shadowRoot,owner=[...shadow.querySelectorAll('button')].find(b=>b.textContent==='Geminiウィンドウを開く');
+  const shadow=card.host.shadowRoot,owner=shadow.querySelector('button.owner');
   const output=shadow.querySelector('.output'),conversation=shadow.querySelector('a.conversation');
   const normal=fixtureState==='answer'||readyOnly,ownerFooter=owner.getBoundingClientRect().top>=output.getBoundingClientRect().bottom;
   const article=shadow.querySelector('article'),articleStyle=getComputedStyle(article);
@@ -71,9 +74,9 @@ function report(){
     actionOrder,ownerFooter,ownerRightDelta,ownerFontSize:getComputedStyle(owner).fontSize,conversationWidthDelta,
     conversationVisible:visible(conversation),
     actionPass:normal?ownerFooter&&ownerRightDelta<=1&&parseFloat(getComputedStyle(owner).fontSize)<14&&
-      (readyOnly?!conversation:overflowing&&!expanded?!visible(conversation)&&actionOrder.length===1&&actionOrder[0]==='もっと見る':
-        visible(conversation)&&conversationWidthDelta<=1&&actionOrder[0]==='Geminiを開いて会話を続ける'&&
-        (!expanded||actionOrder[1]==='折りたたむ')):!conversation&&parseFloat(getComputedStyle(owner).fontSize)>=14,
+      (readyOnly?!conversation:overflowing&&!expanded?!visible(conversation)&&actionOrder.length===1&&actionOrder[0]===translate('もっと見る'):
+        visible(conversation)&&conversationWidthDelta<=1&&actionOrder[0]===translate('Geminiを開いて会話を続ける')&&
+        (!expanded||actionOrder[1]===translate('折りたたむ'))):!conversation&&parseFloat(getComputedStyle(owner).fontSize)>=14,
     previewPass:!preview||toggleVisible===overflowing&&(expanded
       ?getComputedStyle(preview).maxHeight==='none'&&previewHeight>=preview.scrollHeight-1
       :previewHeight<=cap+1)};

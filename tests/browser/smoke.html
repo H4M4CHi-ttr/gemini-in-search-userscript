@@ -6,7 +6,7 @@
 <iframe id="gemini" title="Gemini worker fixture" src="./smoke-frame.html"></iframe><pre id="result">準備中…</pre>
 <script type="module">
 const script=await(await fetch('/outputs/userscript/gemini-search-bridge.user.js')).text();
-const store=new Map(), tabs={google:{},gemini:{}}, listeners=[];
+const store=new Map([['gsb-userscript:preferences',{version:1,language:'ja',promptTemplate:null}]]), tabs={google:{},gemini:{}}, listeners=[];
 const locations={google:new URL('https://www.google.com/search?q=2%2B2'),gemini:new URL('https://gemini.google.com/app')};
 const frames={google:document.querySelector('#google'),gemini:document.querySelector('#gemini')};
 const visibility={google:'visible',gemini:'visible'};
@@ -48,13 +48,15 @@ async function bootGemini(url){
   d.body.innerHTML='<button aria-label="New chat">New chat</button><textarea aria-label="Prompt"></textarea><button aria-label="Send message">Send</button><main></main>';
   d.querySelector('[aria-label="New chat"]').onclick=()=>{d.querySelector('main').replaceChildren();d.querySelector('textarea').value='';locations.gemini=new URL('https://gemini.google.com/app')};
   d.querySelector('[aria-label="Send message"]').onclick=()=>{
-    const query=d.querySelector('textarea').value;sentQueries.push(query);sends++;d.querySelector('textarea').value='';
+    const query=d.querySelector('textarea').value;
+    assert(query.startsWith('ウェブ検索し参照を明示: '),'Localized default prefix reaches Gemini');
+    const rawQuery=query.slice('ウェブ検索し参照を明示: '.length);sentQueries.push(rawQuery);sends++;d.querySelector('textarea').value='';
     locations.gemini=new URL('https://gemini.google.com/app/mock-chat-'+sends);
-    const match=/^(\d+)\+(\d+)$/.exec(query);if(!match)throw Error('Unexpected fixture query');
+    const match=/^(\d+)\+(\d+)$/.exec(rawQuery);if(!match)throw Error('Unexpected fixture query');
     const main=d.querySelector('main');main.innerHTML='<user-query></user-query><button aria-label="Stop response">Stop</button><model-response><div class="markdown-main-panel" aria-busy="true"><p></p></div></model-response>';
     main.querySelector('user-query').textContent=query;
     const parts=['Draft <b>text</b>','Draft revised',String(Number(match[1])+Number(match[2]))];let step=0;
-    const advance=()=>{if(!pipApi.window||pipApi.window.closed){setTimeout(advance,80);return}main.querySelector('p').textContent=parts[step++];if(step===parts.length){main.querySelector('.markdown-main-panel').setAttribute('aria-busy','false');main.querySelector('button').remove()}else setTimeout(advance,query==='4+5'?1200:350)};
+    const advance=()=>{if(!pipApi.window||pipApi.window.closed){setTimeout(advance,80);return}main.querySelector('p').textContent=parts[step++];if(step===parts.length){main.querySelector('.markdown-main-panel').setAttribute('aria-busy','false');main.querySelector('button').remove()}else setTimeout(advance,rawQuery==='4+5'?1200:350)};
     setTimeout(advance,100);
   };
   execute('gemini');
@@ -72,7 +74,7 @@ async function run(){
   await ready(frames.google);const d=buildGoogleDOM();
   execute('google');await wait(()=>card());
   assert(card().querySelectorAll('button').length===1&&!card().querySelector('input'),'Initial single button');
-  assert(!store.get('gsb-userscript:v4:request'),'No send before PiP consent');
+  assert(!store.get('gsb-userscript:v5:request'),'No send before PiP consent');
   card().querySelector('button').click();await wait(()=>pipButton());
   assert(sends===0,'No send before Gemini trusted-start flow');
   pipButton().click();await wait(completed);await pause(150);

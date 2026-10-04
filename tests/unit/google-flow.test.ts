@@ -3,6 +3,7 @@ import { startGoogle } from "../../src/userscript/google-flow";
 import { MAX_JOB_AGE_MS, WORKER_MAX_AGE_MS, RECEIPTS_KEY, REPLY_KEY, REQUEST_KEY, SETTINGS_KEY, WORKER_KEY, FOCUS_KEY, FOCUS_ACK_KEY,
   type UserscriptReply, type UserscriptRequest } from "../../src/userscript/protocol";
 import { writeReceipt } from "../../src/userscript/receipts";
+import { PREFERENCES_KEY } from "../../src/userscript/preferences";
 
 const ui = vi.hoisted(() => ({ cards: [] as { render: ReturnType<typeof vi.fn>; onOpen: () => void; onRetry: (() => void) | undefined }[], changes: [] as (() => void)[] }));
 vi.mock("../../src/content/google/card-view", () => ({ SearchCardView: class {
@@ -10,7 +11,7 @@ vi.mock("../../src/content/google/card-view", () => ({ SearchCardView: class {
   constructor(readonly onOpen: () => void, readonly onRetry: (() => void) | undefined = undefined) { ui.cards.push(this); }
   mount() {}
 } }));
-vi.mock("../../src/content/google/search-overrides", () => ({ SearchOverrides: class { setConversationUrl = vi.fn(); } }));
+vi.mock("../../src/content/google/search-overrides", () => ({ SearchOverrides: class { setConversationUrl = vi.fn(); refreshLanguage = vi.fn(); } }));
 vi.mock("../../src/content/google/query-observer", async (importOriginal) => ({
   ...await importOriginal<typeof import("../../src/content/google/query-observer")>(),
   observeGoogleQuery: (change: () => void) => { ui.changes.push(change); return () => {}; },
@@ -29,7 +30,7 @@ function notify(key: string): void {
   for (const listener of listeners.get(key) ?? []) listener(key, undefined, store.get(key), true);
 }
 function readyWorker(): void {
-  store.set(WORKER_KEY, { id: workerId, seenAt: Date.now(), visible: false, busy: false, pipReady: true, protocolVersion: 4 });
+  store.set(WORKER_KEY, { id: workerId, seenAt: Date.now(), visible: false, busy: false, pipReady: true, protocolVersion: 5 });
   notify(WORKER_KEY);
 }
 function changeQuery(query: string, source = 0): void {
@@ -87,13 +88,99 @@ beforeEach(() => {
     listeners.set(key, [...listeners.get(key) ?? [], listener]); return listeners.size;
   });
   vi.stubGlobal("document", { readyState: "complete", getElementById: () => null });
-  vi.stubGlobal("window", { setInterval, clearInterval, setTimeout, clearTimeout });
+  vi.stubGlobal("window", { setInterval, clearInterval, setTimeout, clearTimeout, addEventListener: vi.fn() });
   vi.stubGlobal("location", new URL(searchUrl("original")));
   readyWorker();
 });
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe("actual Google flow storage recovery", () => {
+  it("freezes the offered prompt across preference changes, polling and a source document reload", async () => {
+    const tab = { gsbSourceTabId: 1 } as Record<string, unknown>;
+    store.set(WORKER_KEY, { ...store.get(WORKER_KEY) as object, busy: true });
+    store.set(PREFERENCES_KEY, { version: 1, language: "en", promptTemplate: "Original: %%prompt%%" });
+    await startGoogle(tab);
+    expect(tab.gsbV5PendingSearch).toEqual(expect.objectContaining({ promptText: "Original: original" }));
+    expect(requests()).toHaveLength(0);
+    store.set(PREFERENCES_KEY, { version: 1, language: "ja", promptTemplate: "Changed: %%prompt%%" });
+    notify(PREFERENCES_KEY);
+    vi.advanceTimersByTime(3_000);
+    reloadDocument();
+    await startGoogle(tab);
+    readyWorker();
+    expect(request().version).toBe(5);
+    expect(request().job).toEqual(expect.objectContaining({ query: "original", promptText: "Original: original" }));
+    expect(requests()).toHaveLength(1);
+  });
+
+  it("reoffers the identical prompt and job id after source reload while preference values change", async () => {
+    const tab = { gsbSourceTabId: 1 } as Record<string, unknown>;
+    store.set(PREFERENCES_KEY, { version: 1, language: "en", promptTemplate: "Original: %%prompt%%" });
+    await startGoogle(tab);
+    const original = structuredClone(request());
+    store.delete(REQUEST_KEY);
+    store.set(PREFERENCES_KEY, { version: 1, language: "ja", promptTemplate: "Changed: %%prompt%%" });
+    reloadDocument();
+    await startGoogle(tab);
+    expect(request()).toEqual(original);
+    expect(requests()).toHaveLength(2);
+  });
+
+  it("takes the current template only for an explicit retry, preserving its consumed signature and old receipt", async () => {
+    const tab = { gsbSourceTabId: 1 } as Record<string, unknown>;
+    store.set(PREFERENCES_KEY, { version: 1, language: "en", promptTemplate: "Original: %%prompt%%" });
+    const original = await failSource(tab);
+    const receipt = structuredClone(store.get(RECEIPTS_KEY));
+    const signature = tab.gsbV4LastDispatched;
+    store.set(PREFERENCES_KEY, { version: 1, language: "ja", promptTemplate: "Changed: %%prompt%%" });
+    notify(PREFERENCES_KEY);
+    expect(requests()).toHaveLength(1);
+    ui.cards[0]!.onRetry!();
+    expect(request().job.promptText).toBe("Changed: original");
+    expect(request().job.id).not.toBe(original.job.id);
+    expect(tab.gsbV4LastDispatched).toBe(signature);
+    expect(store.get(RECEIPTS_KEY)).toEqual(receipt);
+  });
+
+  it("rejects a v4 owner on both the initial dispatch and unacknowledged reoffer paths", async () => {
+    const tab = { gsbSourceTabId: 1 } as Record<string, unknown>;
+    await startGoogle(tab);
+    const original = structuredClone(request());
+    store.delete(REQUEST_KEY);
+    store.set(WORKER_KEY, { ...store.get(WORKER_KEY) as object, protocolVersion: 4 });
+    notify(WORKER_KEY);
+    vi.advanceTimersByTime(3_000);
+    expect(requests()).toHaveLength(1);
+    expect(ui.cards[0]!.render).toHaveBeenLastCalledWith(expect.objectContaining({ pipReady: false, detail: expect.stringMatching(/再読み込み/) }));
+    reloadDocument();
+    await startGoogle(tab);
+    expect(requests()).toHaveLength(1);
+    expect(tab.gsbV4ActiveJob).toEqual(original.job);
+    const freshTab = { gsbSourceTabId: 2 } as Record<string, unknown>;
+    await startGoogle(freshTab);
+    expect(requests()).toHaveLength(1);
+  });
+
+  it.each(["completed", "generating", "no receipt"])("does not replay a legacy raw active job: %s", async (phase) => {
+    const tab = { gsbSourceTabId: 1 } as Record<string, unknown>;
+    await startGoogle(tab);
+    const original = structuredClone(request());
+    const { promptText: _promptText, ...legacy } = original.job;
+    tab.gsbV4ActiveJob = legacy;
+    delete tab.gsbV4LastJob;
+    if (phase === "completed") writeReceipt(legacy, completed(original.job));
+    else if (phase === "generating") writeReceipt(legacy, { jobId: legacy.id, sourceTabId: 1, status: "generating", updatedAt: Date.now(), progressText: "legacy partial" });
+    store.delete(REQUEST_KEY);
+    reloadDocument();
+    await startGoogle(tab);
+    expect(tab.gsbV4ActiveJob).toBeNull();
+    expect(tab.gsbV4LastDispatched).toBe("https://www.google.com/search\noriginal");
+    readyWorker(); vi.advanceTimersByTime(3_000);
+    expect(requests()).toHaveLength(1);
+    if (phase === "completed") expect(ui.cards[0]!.render).toHaveBeenLastCalledWith(expect.objectContaining({ answer: expect.objectContaining({ jobId: legacy.id, plainText: "answer" }) }));
+    else expect(ui.cards[0]!.render).toHaveBeenLastCalledWith(expect.objectContaining({ canRetry: true, detail: expect.stringMatching(/自動再送信しません/) }));
+  });
+
   it("passes live PiP readiness to the card before any answer is received", async () => {
     await startGoogle({ gsbSourceTabId: 1 });
     expect(ui.cards[0]!.render).toHaveBeenLastCalledWith(expect.objectContaining({
@@ -229,7 +316,7 @@ describe("actual Google flow storage recovery", () => {
     expect(ui.cards[0]!.render).toHaveBeenLastCalledWith(expect.objectContaining({ progressText: "partial answer" }));
     vi.stubGlobal("GM_getTabs", (callback: (tabs: Record<string, unknown>) => void) => callback({}));
     const open = vi.fn(() => ({ closed: false, focus: vi.fn() }));
-    vi.stubGlobal("window", { setInterval, clearInterval, setTimeout, clearTimeout, open });
+    vi.stubGlobal("window", { setInterval, clearInterval, setTimeout, clearTimeout, open, addEventListener: vi.fn() });
     ui.cards[0]!.render.mockClear();
     ui.cards[0]!.onOpen();
     await Promise.resolve();

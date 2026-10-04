@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
+import { GEMINI_ICON } from "../../src/shared/gemini-icon";
 import { isAiModeLink, SearchOverrides } from "../../src/content/google/search-overrides";
 
 // Small DOM model for native tag/class/attribute selection and mutation counts.
@@ -113,9 +114,21 @@ function knownShell(root: NodeStub, moreLabel = "その他の AI による概要
 }
 const hidden = (element: NodeStub) => element.hasAttribute("data-gsb-ai-hidden");
 const writes = (element: NodeStub): number => element.writes + element.children.reduce((sum, child) => sum + writes(child), 0);
+beforeEach(() => vi.stubGlobal("navigator", { language: "ja" }));
 afterEach(() => vi.unstubAllGlobals());
 
 describe("conservative Google AI overrides", () => {
+  it("refreshes the English navigation title without replacing its icon or native wrappers", () => {
+    const { doc, nav } = setup(); aiLink(nav, "AI Mode");
+    vi.stubGlobal("navigator", { language: "en" });
+    const overrides = new SearchOverrides(doc);
+    const replacement = nav.children[1]!; const icon = replacement.querySelector("img");
+    expect(replacement.title).toBe("Google AI Mode replaced with Gemini");
+    vi.stubGlobal("navigator", { language: "ja" }); overrides.refreshLanguage();
+    expect(replacement.title).toBe("GoogleのAI モードをGeminiに置き換え");
+    expect(replacement.querySelector("img")).toBe(icon);
+    overrides.stop();
+  });
   it("requires the exact navigation label and Google search AI-mode destination", () => {
     const base = "https://www.google.com/search?q=test";
     expect(isAiModeLink(" AI モード ", "/search?q=test&udm=50", base)).toBe(true);
@@ -248,7 +261,8 @@ describe("conservative Google AI overrides", () => {
     ]);
     expect(wrappers.find((element) => element.hasAttribute("data-gsb-gemini-label"))).toBeDefined();
     const icon = replacement.querySelector("img")!;
-    expect(icon.getAttribute("src")).toMatch(/^data:image\/svg\+xml,/);
+    expect(icon.getAttribute("src")).toBe(GEMINI_ICON);
+    expect(icon.getAttribute("referrerpolicy")).toBe("no-referrer");
     expect(icon.getAttribute("alt")).toBe(""); expect(icon.getAttribute("aria-hidden")).toBe("true");
     for (const element of [replacement, ...wrappers]) {
       for (const attribute of ["onclick", "jsaction", "jsname", "data-ved", "data-rpc"]) expect(element.hasAttribute(attribute)).toBe(false);

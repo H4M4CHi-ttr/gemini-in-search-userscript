@@ -1,0 +1,92 @@
+# Gemini in Search — ユーザースクリプト
+
+[English](README.md)
+
+Google検索の中に、Geminiの途中回答・完成回答を表示します。Tampermonkeyでは
+**Gemini Search Bridge**という名前で表示されます。ログイン中のGemini画面を操作する方式で、APIキーや開発者のサーバーは使いません。
+
+常に手前に表示される小さなPiPウィンドウを使います。PiPが表示されている間は
+**Gemini本体のウィンドウを最小化できますが、閉じないでください**。本体を閉じるとPiPも閉じ、回答の取得が止まります。
+
+## Chromeにインストールする
+
+最初はこの手順と「一度起動したら、検索を続ける」を読んでください。設定と制限は必要なときに参照できます。
+
+1. パソコンのChromeに[Tampermonkey](https://www.tampermonkey.net/index.php?browser=chrome)をインストールします。5.5以降を使ってください。
+2. ChromeのTampermonkey拡張機能の詳細を開き、ユーザースクリプトの許可（Allow User Scripts）をオンにします。場所が分からない場合は[Tampermonkey公式の案内](https://www.tampermonkey.net/faq.php?locale=en&q=Q209#google_vignette)を参照してください。
+3. [このユーザースクリプトをインストール](https://raw.githubusercontent.com/H4M4CHi-ttr/gemini-in-search-userscript/main/dist/gemini-in-search.user.js)し、Tampermonkeyの確認画面でインストールします。
+4. [Gemini](https://gemini.google.com/app)にログインし、Google検索のタブを再読み込みします。
+
+旧版と同時に2本有効にせず、既存のスクリプトを更新してください。更新時の識別に使う名前とnamespaceは維持しています。Greasy Forkのリンクは、投稿後に追加します。
+
+## 一度起動したら、検索を続ける
+
+検索カードの「Geminiウィンドウを開く」を押します。Gemini側の案内を読み、
+「PiPを開いて自動送信を開始」を直接クリックしてください。Google検索に戻ると、現在の検索と次の検索が自動で送られます。
+
+PiPは画面の隅に置けます。小窓は表示したままにし、Gemini本体も閉じずに残してください。
+本体を最小化できるのはPiPが表示されている間だけです。PiP自体は最小化・終了しないでください。取得が止まった場合は本体を復元し、PiPを開き直します。
+
+長い回答は短いプレビューで始まります。「もっと見る」で全文を表示すると、
+「Geminiを開いて会話を続ける」「折りたたむ」の順に表示されます。短い回答には展開ボタンを出しません。PiP準備完了後の起動ボタンは、右下の小さな補助操作になります。
+
+ログイン、CAPTCHA、利用上限、規約確認、モデル選択はGemini側で操作してください。
+これらの制限を回避する機能はありません。失敗・中断した検索は自動再送しません。既存の会話で送信状況を確認した後、必要なら「この検索を再送信」を押してください。
+
+## 表示言語と送信文を設定する
+
+Tampermonkeyのメニューから「Gemini Search Bridge 設定」、またはGeminiの準備画面から
+「言語・プロンプト設定」を開きます。表示言語は「ブラウザーに合わせる」・日本語・Englishから選べます。
+ブラウザーの言語が日本語なら日本語、それ以外なら英語です。Geminiの回答本文は翻訳しません。
+
+既定のテンプレートは表示言語に合わせて切り替わります。
+
+```text
+日本語: ウェブ検索し参照を明示: %%prompt%%
+英語: Search the web and cite your sources: %%prompt%%
+```
+
+自分の送信文を使う場合は、既定のテンプレートを使うチェックを外してください。
+`%%prompt%%`が検索語に置き換わります。複数入れた場合は、すべて同じ検索語に置き換わります。
+
+```text
+次の質問に、結論と出典を簡潔に示して答えてください: %%prompt%%
+```
+
+保存後の新しい検索から適用します。既に待機・送信中の検索は、準備済みの送信文を保ちます。
+テンプレートは4,096文字、置き換え後の送信文は16,384文字までです。上限を超えた場合は短縮せず、送信を止めます。
+
+### v0.4.xから更新する場合
+
+v0.5をインストールしたら、Google検索と既存のGemini本体を両方再読み込みし、PiP開始ボタンをもう一度押してください。
+更新前の途中ジョブを新しいテンプレートで自動再送することはありません。完了済みの保存回答は、復元条件を満たす場合に表示できます。
+
+## データの扱いと制限
+
+検索語・回答は、タブ間通信のためTampermonkeyのローカルストレージへ一時保存します。
+表示言語・テンプレートの設定も同じ環境に保存されます。重複防止と準備済みジョブの参照はタブの状態に残ります。
+送信した文はご自身のGemini履歴に残る場合があり、通常の利用制限が適用されます。
+
+Gemini画面のDOMとChromeの描画に依存する非公式連携です。非公開RPC、Cookieの直接取得、
+Gemini API、Offscreen、iframe、DNRは使いません。GoogleのAI回答を隠す処理は安全側の判定を行うため、未知の枠や通常結果との共有枠は残る場合があります。
+アイコンはGoogleのfaviconサービスから読み込みます。リファラーを送らず、アイコンのリクエストに検索語・会話本文を含めません。
+
+複数行テンプレートの行頭・行末の空白は、Geminiの表示と照合できない場合があります。
+確認が止まったときは、無条件に再送せず既存の会話を確認してください。
+PiPでも、すべてのOS・ブラウザー状態で取得が止まらない保証はありません。
+
+## 開発する
+
+```sh
+npm ci
+npm run typecheck
+npm test
+npm run build
+```
+
+ViteでTypeScriptを単一IIFEにバンドルし、minifyは行いません。
+公開用ファイルは`dist/gemini-in-search.user.js`、ローカル更新用は`outputs/userscript/gemini-search-bridge.user.js`です。
+両方とも同じビルド結果です。実装の境界は[設計書](docs/DESIGN.md)を参照してください。
+
+解決しない問題は[Issues](https://github.com/H4M4CHi-ttr/gemini-in-search-userscript/issues)へ報告できます。
+コードのライセンスは[MIT](LICENSE)です。Googleのアイコンは[別の表記](THIRD_PARTY_NOTICES.md)で扱い、このプロジェクトはGoogleの公式提供ではありません。

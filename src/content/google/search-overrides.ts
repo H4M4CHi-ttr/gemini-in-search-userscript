@@ -1,11 +1,12 @@
 import { sanitizeConversationUrl } from "../../shared/conversation-url";
+import { GEMINI_ICON } from "../../shared/gemini-icon";
+import { translate } from "../../userscript/i18n";
 
 const AI_MODULES = '#m-x-content, [data-attrid="AIOverview"], [data-attrid="ai_overview"]';
 const PROTECTED_RESULTS = '#search, #rso, #center_col, #rcnt, #hdtb, main, [role="main"], #gemini-search-bridge-root';
 const HIDDEN_MARK = "data-gsb-ai-hidden";
 const NAV_MARK = "data-gsb-ai-replaced";
 const GEMINI_APP = "https://gemini.google.com/app";
-const GEMINI_ICON = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#4285f4"/><stop offset=".5" stop-color="#9b72cb"/><stop offset="1" stop-color="#d96570"/></linearGradient></defs><path fill="url(#g)" d="M12 0C13.8 7.2 16.8 10.2 24 12C16.8 13.8 13.8 16.8 12 24C10.2 16.8 7.2 13.8 0 12C7.2 10.2 10.2 7.2 12 0Z"/></svg>')}`;
 
 const normalizeLabel = (label: string): string => label.trim().replace(/\s+/g, " ");
 
@@ -84,6 +85,8 @@ export class SearchOverrides {
     this.refresh();
   }
 
+  refreshLanguage(): void { this.refresh(); }
+
   private refresh(): void {
     if (this.stopped) return;
     // ponytail: Google has no stable public AI-module selector; leave unknown modules visible.
@@ -113,7 +116,6 @@ export class SearchOverrides {
         !isAiModeLink(original.textContent ?? "", original.href, this.doc.baseURI)) continue;
       const replacement = this.doc.createElement("a");
       replacement.setAttribute("data-gsb-gemini-nav", "");
-      replacement.title = "GoogleのAI モードをGeminiに置き換え";
       replacement.target = "_blank";
       replacement.rel = "noopener noreferrer";
       original.setAttribute(NAV_MARK, "");
@@ -122,6 +124,8 @@ export class SearchOverrides {
     }
     for (const [original, entry] of this.navigation) {
       const { replacement } = entry;
+      const title = translate("GoogleのAI モードをGeminiに置き換え");
+      if (replacement.title !== title) replacement.title = title;
       const shape = navigationShape(original);
       const signature = JSON.stringify(shape);
       if (entry.shape !== signature) {
@@ -138,6 +142,7 @@ export class SearchOverrides {
         if (!parent) label = parent = this.doc.createElement("span");
         parent.setAttribute("data-gsb-gemini-label", "");
         const icon = this.doc.createElement("img");
+        icon.setAttribute("referrerpolicy", "no-referrer");
         icon.setAttribute("src", GEMINI_ICON);
         icon.setAttribute("alt", "");
         icon.setAttribute("aria-hidden", "true");

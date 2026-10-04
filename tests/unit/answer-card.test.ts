@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { SearchCardView, sanitizeCardLink } from "../../src/content/google/card-view";
 import type { StructuredAnswer } from "../../src/shared/answer-models";
 
@@ -53,9 +53,35 @@ function setup(onRetry?: () => void): { view: SearchCardView; article: ElementSt
   const article = (view.host as unknown as ElementStub).shadowRoot!.querySelector("article")!;
   return { view, article, onOpen };
 }
+beforeEach(() => vi.stubGlobal("navigator", { language: "ja" }));
 afterEach(() => vi.unstubAllGlobals());
 
 describe("minimal Gemini answer card", () => {
+  it("localizes controls and statuses without translating answer text or changing preview rules", () => {
+    vi.stubGlobal("navigator", { language: "en-US" });
+    const { view, article } = setup(vi.fn());
+    expect(article.lang).toBe("en");
+    expect(article.textContent).toBe("Open Gemini window");
+    measuredHeight = 900;
+    const state = { jobId: "english", pipReady: true, status: "Geminiに送信しています…", progressText: "日本語の回答本文", conversationUrl: "https://gemini.google.com/app/en123" };
+    view.render(state);
+    const toggle = descendants(article).find((node) => node.className === "expand")!;
+    const cta = descendants(article).find((node) => node.className === "conversation")!;
+    expect(article.textContent).toContain("Sending to Gemini…");
+    expect(article.textContent).toContain("日本語の回答本文");
+    expect(toggle.textContent).toBe("Show more");
+    expect(cta.hidden).toBe(true);
+    expect(article.children[1]!.textContent).toBe("Open Gemini window");
+    toggle.dispatchEvent(new Event("click"));
+    expect(toggle.textContent).toBe("Show less");
+    expect(cta.textContent).toBe("Continue this conversation in Gemini");
+    expect(cta.hidden).toBe(false);
+    vi.stubGlobal("navigator", { language: "ja" });
+    view.render(state);
+    expect(article.lang).toBe("ja");
+    expect(descendants(article).find((node) => node.className === "expand")!.textContent).toBe("折りたたむ");
+    expect(descendants(article).find((node) => node.className === "conversation")!.hidden).toBe(false);
+  });
   it("shows the retry action only when requested and invokes its separate callback", () => {
     const onRetry = vi.fn();
     const { view, article, onOpen } = setup(onRetry);

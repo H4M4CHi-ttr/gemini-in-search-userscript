@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SearchQueue, searchSignature } from "../../src/userscript/search-queue";
-const search = (query: string) => ({ query, sourceUrl: `https://www.google.com/search?q=${query}` });
+const search = (query: string) => ({ query, sourceUrl: `https://www.google.com/search?q=${query}`, promptText: `Frozen: ${query}` });
 describe("latest search queue", () => {
   it("retains one latest query while the worker is busy", () => {
     const queue = new SearchQueue();
@@ -31,5 +31,12 @@ describe("latest search queue", () => {
     expect(queue.pending).toBeNull();
     queue.offer(search("B")); queue.lastDispatched = searchSignature(search("A"));
     expect(queue.pending?.query).toBe("B");
+  });
+
+  it("keeps the offered prompt snapshot when the same raw search is offered again", () => {
+    const queue = new SearchQueue();
+    queue.offer(search("A"));
+    queue.offer({ ...search("A"), promptText: "Changed template: A" });
+    expect(queue.pending?.promptText).toBe("Frozen: A");
   });
 });

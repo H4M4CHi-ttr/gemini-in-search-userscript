@@ -1,5 +1,7 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { WorkerView } from "../../src/userscript/worker-view";
+import { openPreferences } from "../../src/userscript/preferences-view";
+vi.mock("../../src/userscript/preferences-view", () => ({ openPreferences: vi.fn() }));
 
 class FakeElement extends EventTarget {
   id = "";
@@ -28,9 +30,35 @@ function find(root: FakeElement, className: string): FakeElement {
   throw new Error(`Missing ${className}`);
 }
 
+beforeEach(() => vi.stubGlobal("navigator", { language: "ja" }));
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Gemini PiP onboarding", () => {
+  it("shows the three-step visual flow and English owner/PiP rules, refreshing in place", () => {
+    const body = new FakeElement("body");
+    vi.stubGlobal("document", { body, createElement: (name: string) => new FakeElement(name) });
+    vi.stubGlobal("navigator", { language: "en" });
+    const view = new WorkerView({ onOpenPip: vi.fn(), onClosePip: vi.fn() });
+    const root = body.children[0]!.shadowRoot!;
+    const screen = find(root, "screen");
+    const steps = find(root, "steps");
+    expect(steps.children).toHaveLength(3);
+    expect(find(root, "policy-ok").children[1]!.textContent).toBe("Minimize: OK");
+    expect(find(root, "policy-no").children[1]!.textContent).toBe("Close: No");
+    expect(find(root, "primary").textContent).toBe("Open PiP and start automatic sending");
+    expect(find(root, "preferences").textContent).toBe("Language and prompt settings");
+    find(root, "preferences").dispatchEvent(new Event("click"));
+    expect(openPreferences).toHaveBeenCalledOnce();
+    expect(find(root, "mark").tagName).toBe("img");
+    view.update({ pipReady: true, supported: true, status: "回答が完了しました" });
+    expect(find(root, "status").textContent).toBe("Answer complete");
+    expect(find(root, "ready").textContent).toContain("Do not close it");
+    vi.stubGlobal("navigator", { language: "ja" });
+    view.update({ pipReady: true, supported: true });
+    expect(find(root, "primary").textContent).toBe("PiP小窓は表示中です");
+    expect(find(root, "steps")).toBe(steps);
+    expect(find(root, "screen")).toBe(screen);
+  });
   it("keeps Gemini intact, starts only in the click stack, and supports reveal/reopen and stopped states", () => {
     const body = new FakeElement("body");
     const gemini = new FakeElement("main");

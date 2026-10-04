@@ -2,13 +2,13 @@ import { Phase2GeminiAdapter, GeminiAdapterError } from "../content/gemini/gemin
 import { captureAnswerBaseline, observeAnswerCompletion, AnswerObserverError } from "../content/gemini/gemini-answer-observer";
 import { extractStructuredAnswer } from "../content/gemini/gemini-extractor";
 import { MAX_ANSWER_TEXT_LENGTH } from "../shared/answer-models";
-import { buildPrompt } from "../shared/prompt-builder";
 import { sanitizeConversationUrl } from "../shared/conversation-url";
 import { PipCompanion } from "./pip";
 import { WorkerView } from "./worker-view";
 import { acceptConsent, consentAccepted, documentReady } from "./settings";
 import { readReceipt, writeReceipt, pruneReceipts } from "./receipts";
 import { submittedQueryMatches } from "./conversation-guard";
+import { PREFERENCES_KEY } from "./preferences";
 import {
   REQUEST_KEY, REPLY_KEY, WORKER_KEY, FOCUS_KEY, FOCUS_ACK_KEY, MAX_JOB_AGE_MS,
   liveWorker, storedWorker, pendingRequest, isUserscriptRequest, isUserscriptReply, isFocusRequest,
@@ -55,7 +55,7 @@ export async function startGemini(tab: Record<string, unknown>, workerId: string
     const owner = liveWorker(GM_getValue(WORKER_KEY, null));
     if (owner && owner.id !== workerId) { controller?.abort(); return; }
     GM_setValue(WORKER_KEY, { id: workerId, seenAt: Date.now(), visible: document.visibilityState === "visible",
-      busy: controller !== null, pipReady: pip.visible() && consentAccepted(), protocolVersion: 4,
+      busy: controller !== null, pipReady: pip.visible() && consentAccepted(), protocolVersion: 5,
       ...(active ? { activeJobId: active.job.id } : {}) });
     const reply = GM_getValue<unknown>(REPLY_KEY, null);
     if (isUserscriptReply(reply) && Date.now() - reply.updatedAt > MAX_JOB_AGE_MS) GM_deleteValue(REPLY_KEY);
@@ -154,7 +154,7 @@ export async function startGemini(tab: Record<string, unknown>, workerId: string
         if (!/^\/(?:u\/\d+\/)?app\/?$/.test(location.pathname)) throw new GeminiAdapterError("manual_intervention", "新規チャットの準備を確認できませんでした。");
         if (!pip.visible()) throw new GeminiAdapterError("manual_intervention", visibilityDetail()!);
         publish(request, "filling_prompt");
-        await adapter.fillPrompt(buildPrompt(request.job.query, "raw"), signal);
+        await adapter.fillPrompt(request.job.promptText, signal);
         if (!/^\/(?:u\/\d+\/)?app\/?$/.test(location.pathname) || routeChanged) throw new GeminiAdapterError("manual_intervention", "準備中に会話が変わりました。送信を停止しました。");
         if (!pip.visible()) throw new GeminiAdapterError("manual_intervention", visibilityDetail()!);
         baseline = captureAnswerBaseline(document);
@@ -166,10 +166,10 @@ export async function startGemini(tab: Record<string, unknown>, workerId: string
         tab.gsbSubmittedAt = submittedAt;
         tab.gsbRunPhase = "generating";
         GM_saveTab(tab);
-        await pinConversation(signal, request.job.query);
+        await pinConversation(signal, request.job.promptText);
       }
       if (!tab.gsbRunConversationUrl || readConversationUrl() !== tab.gsbRunConversationUrl ||
-          !submittedQueryMatches(document, request.job.query) || routeChanged) {
+          !submittedQueryMatches(document, request.job.promptText) || routeChanged) {
         throw new GeminiAdapterError("manual_intervention", "生成中の会話が変わりました。取り違えを防ぐため取得を停止しました。自動再送信はしません。");
       }
       publish(request, "generating");
@@ -231,6 +231,9 @@ export async function startGemini(tab: Record<string, unknown>, workerId: string
   window.addEventListener("popstate", () => { if (active) { routeChanged = true; controller?.abort(); } });
   GM_addValueChangeListener(REQUEST_KEY, () => { if (!active) void processRequest(); });
   GM_addValueChangeListener(FOCUS_KEY, (_key, _old, value) => focusRequested(value));
+  function preferencesChanged(): void { pip.refreshLanguage(); updateView(); }
+  GM_addValueChangeListener(PREFERENCES_KEY, preferencesChanged);
+  window.addEventListener("gsb-preferences-changed", preferencesChanged);
   heartbeat(); updateView();
   focusRequested(GM_getValue(FOCUS_KEY, null));
   window.setInterval(() => { heartbeat(); void processRequest(); }, 3_000);
