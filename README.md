@@ -88,6 +88,31 @@ Multiline template indentation may not match Gemini's normalized displayed text.
 If verification stops, inspect the existing chat instead of resending blindly.
 PiP does not guarantee uninterrupted capture under every OS or browser condition.
 
+## Bonus: Why PiP—and why an extension could skip it
+
+The tricky part was not sending a prompt, but reading the answer back. This script
+reads the answer from Gemini's page. During development, background tabs,
+minimized windows and even fully covered windows could stop updating the answer
+UI. Gemini could have an answer in its history while the search card had nothing
+to read from the page.
+
+Keeping a small, always-on-top [Document PiP companion](https://developer.chrome.com/docs/web-platform/document-picture-in-picture/)
+open let answer rendering and capture continue in our tests, even with the Gemini
+owner minimized. The Gemini app stays in its original window; it is not moved
+into PiP. This gives us a small visible companion instead of a full-sized window
+that must stay uncovered.
+
+An extension would not necessarily need PiP. Earlier extension experiments
+successfully captured answers using an open [Side Panel](https://developer.chrome.com/docs/extensions/reference/api/sidePanel)
+and, later, a dedicated, unfocused popup that was not minimized. An extension can
+manage those surfaces through Chrome's extension APIs, so a future extension
+could use that approach without PiP.
+
+That does not mean an extension can run Gemini completely out of sight. Our
+Offscreen experiments sent prompts successfully but failed to produce readable
+answer DOM. The requirement is a surface where Gemini keeps rendering—not PiP
+specifically, and not just extension permissions.
+
 ## Build and test
 
 ```sh
