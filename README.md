@@ -2,6 +2,17 @@
 
 [日本語](README.jp.md)
 
+> [!IMPORTANT]
+> **Discontinued — archive planned (November 2026)**
+>
+> [Gemini 4 Hydrogen is now available in Google Search](https://blog.google/products-and-platforms/products/search/gemini-4-hydrogen-search-upgrade/), including AI Mode.
+> The maintainer considers this project's original purpose—bringing Gemini answers into Google Search—to be superseded by Google's official features.
+> Development and maintenance have ended. The repository will be archived manually by the maintainer at a later date.
+>
+> The code and installation instructions below remain for historical reference only.
+> No further updates or compatibility guarantees are provided. For AI-powered search, use [Google Search AI Mode](https://www.google.com/ai).
+
+
 See streaming Gemini answers inside Google Search. This Tampermonkey userscript,
 named **Gemini Search Bridge** in the extension menu, operates your signed-in Gemini
 Web UI. It does not use an API key or a developer backend.
