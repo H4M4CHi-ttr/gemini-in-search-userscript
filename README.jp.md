@@ -2,6 +2,17 @@
 
 [English](README.md)
 
+> [!IMPORTANT]
+> **開発・保守終了／アーカイブ予定（2026年11月）**
+>
+> [Gemini 4 HydrogenがGoogle検索に導入](https://blog.google/products-and-platforms/products/search/gemini-4-hydrogen-search-upgrade/)され、AIモードで利用できるようになりました。
+> これにより、Geminiの回答をGoogle検索に組み込むという本スクリプトの役割は、公式機能で代替されたと判断しました。
+> 本プロジェクトの開発・保守は終了し、リポジトリは管理者が後日手動でアーカイブする予定です。
+>
+> 以下のコードと導入手順は記録として残しますが、今後の更新や動作保証は行いません。
+> AIによる検索には、Google検索の[AIモード](https://www.google.com/ai)をご利用ください。
+
+
 Google検索の中に、Geminiの途中回答・完成回答を表示します。Tampermonkeyでは
 **Gemini Search Bridge**という名前で表示されます。ログイン中のGemini画面を操作する方式で、APIキーや開発者のサーバーは使いません。
 
